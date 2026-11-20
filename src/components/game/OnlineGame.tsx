@@ -6,8 +6,8 @@ import type { Action, GameState } from "@/engine/types";
 import { current, features, groupComplete, living, netWorth, playerOf } from "@/engine/actions";
 import { CHARACTERS, GROUP_COLORS, PLAYER_COLORS, TILES, TOKENS, WAVE_LABEL } from "@/engine/data";
 import { Board } from "@/components/game/Board";
-import { TileArtwork } from "@/components/game/CityArt";
-import { PlayerRail, PropertySheet, RentBreakdown } from "@/components/game/Panels";
+import { PawnAvatar, TileArtwork } from "@/components/game/CityArt";
+import { PlayerRail, PropertySheet, RentBreakdown, useCashDeltas } from "@/components/game/Panels";
 import {
   AuctionDialog,
   BankDialog,
@@ -20,7 +20,7 @@ import {
 } from "@/components/game/Dialogs";
 import { ActionPanel, type PanelKind } from "@/components/game/GameScreen";
 import { QrCode } from "@/components/game/QrCode";
-import { Button, Chip, Modal } from "@/components/ui/kit";
+import { Button, Chip, Modal, Tooltip } from "@/components/ui/kit";
 import { cn, rp } from "@/lib/format";
 import type { PublicRoom } from "@/lib/online";
 import { initMute, isBgmPlaying, isMuted, setMuted, sfx, stopBgm, toggleBgm } from "@/lib/sfx";
@@ -97,6 +97,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [confirmSurrender, setConfirmSurrender] = useState(false);
   const [busy, setBusy] = useState(false);
+  const deltas = useCashDeltas(state);
 
   const versionRef = useRef(0);
   const prevSeatsRef = useRef<number | null>(null);
@@ -392,20 +393,28 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
           </main>
 
           <aside className="flex w-full flex-col gap-3 lg:w-[320px] lg:shrink-0">
-            <div className="panel p-4">
+            <div className="panel relative p-4">
+              {me && deltas[me.id] ? (
+                <span
+                  key={deltas[me.id].seq}
+                  className={cn(
+                    "pointer-events-none absolute -top-3 right-4 z-20 rounded-full border-2 border-ink px-2.5 py-0.5 font-mono text-xs font-extrabold animate-[float-delta_1.35s_ease-out_forwards]",
+                    deltas[me.id].amount > 0 ? "bg-mint text-ink" : "bg-tomato text-white",
+                  )}
+                >
+                  {deltas[me.id].amount > 0 ? `+${rp(deltas[me.id].amount)}` : `−${rp(Math.abs(deltas[me.id].amount))}`}
+                </span>
+              ) : null}
               <div className="text-xs font-bold text-ink-soft">Sekarang bermain</div>
               <div className="mt-2 flex items-center gap-3">
-                <span
-                  className="flex h-12 w-12 items-center justify-center rounded-full border-[2.5px] border-ink text-2xl"
-                  style={{ background: me?.color ?? "#FFD23F" }}
-                >
-                  {me?.token}
-                </span>
+                <PawnAvatar index={state.turnIndex} color={me?.color ?? "#FFD23F"} size={48} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-display text-xl font-extrabold leading-tight">{me?.name}</div>
-                  <div className="text-xs font-semibold text-ink-soft">
-                    {me?.isBot ? "Bot AI" : "Kontroler HP"} · {meChar?.name}
-                  </div>
+                  <Tooltip tip={meChar ? `+ ${meChar.perk} · − ${meChar.flaw}` : undefined} position="bottom">
+                    <div className="cursor-help text-xs font-semibold text-ink-soft underline decoration-dotted underline-offset-2">
+                      {me?.isBot ? "Bot AI" : "Kontroler HP"} · {meChar?.name}
+                    </div>
+                  </Tooltip>
                 </div>
               </div>
               <div className="mt-3 flex items-baseline justify-between rounded-2xl border-2 border-ink bg-tint px-3 py-2">
@@ -573,26 +582,24 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
             <div className="space-y-2">
               {state.players
                 .filter((p) => !p.isBot)
-                .map((p) => (
-                  <button
-                    key={p.id}
-                    disabled={busy}
-                    onClick={() => void reclaimSeat(p.id)}
-                    className="flex w-full items-center gap-3 rounded-2xl border-[2.5px] border-ink bg-white p-3 text-left transition-colors hover:bg-sun-pale"
-                  >
-                    <span
-                      className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-ink text-xl"
-                      style={{ background: p.color }}
+                .map((p) => {
+                  const seatIdx = Math.max(0, state.players.findIndex((x) => x.id === p.id));
+                  return (
+                    <button
+                      key={p.id}
+                      disabled={busy}
+                      onClick={() => void reclaimSeat(p.id)}
+                      className="flex w-full items-center gap-3 rounded-2xl border-[2.5px] border-ink bg-white p-3 text-left transition-colors hover:bg-sun-pale"
                     >
-                      {p.token}
-                    </span>
-                    <div className="flex-1">
-                      <div className="font-display text-sm font-extrabold">{p.name}</div>
-                      <div className="money text-xs text-ink-soft">{rp(p.cash)}</div>
-                    </div>
-                    <Chip color="#2FD592">Masuk →</Chip>
-                  </button>
-                ))}
+                      <PawnAvatar index={seatIdx} color={p.color} size={42} />
+                      <div className="flex-1">
+                        <div className="font-display text-sm font-extrabold">{p.name}</div>
+                        <div className="money text-xs text-ink-soft">{rp(p.cash)}</div>
+                      </div>
+                      <Chip color="#2FD592">Masuk →</Chip>
+                    </button>
+                  );
+                })}
             </div>
             <div className="grid grid-cols-2 gap-2 pt-2">
               <Button onClick={() => router.push(`/watch/${code}`)}>📺 Layar Papan TV</Button>
@@ -646,19 +653,33 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
                     : `⏳ Menunggu giliran ${me?.name ?? "…"}`}
           </div>
 
-          <div className="panel p-4">
-            <div className="flex items-center gap-3">
-              <div
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[2.5px] border-ink text-2xl"
-                style={{ background: myPlayer.color }}
+          <div className="panel relative p-4">
+            {deltas[myPlayer.id] ? (
+              <span
+                key={deltas[myPlayer.id].seq}
+                className={cn(
+                  "pointer-events-none absolute -top-3 right-4 z-20 rounded-full border-2 border-ink px-2.5 py-0.5 font-mono text-xs font-extrabold animate-[float-delta_1.35s_ease-out_forwards]",
+                  deltas[myPlayer.id].amount > 0 ? "bg-mint text-ink" : "bg-tomato text-white",
+                )}
               >
-                {myPlayer.token}
-              </div>
+                {deltas[myPlayer.id].amount > 0
+                  ? `+${rp(deltas[myPlayer.id].amount)}`
+                  : `−${rp(Math.abs(deltas[myPlayer.id].amount))}`}
+              </span>
+            ) : null}
+            <div className="flex items-center gap-3">
+              <PawnAvatar
+                index={Math.max(0, state.players.findIndex((x) => x.id === myPlayer.id))}
+                color={myPlayer.color}
+                size={48}
+              />
               <div className="min-w-0 flex-1">
                 <div className="truncate font-display text-lg font-extrabold leading-tight">{myPlayer.name}</div>
-                <div className="text-xs font-semibold text-ink-soft">
-                  {myChar ? `${myChar.name} · ${myChar.perk}` : "Pemain"}
-                </div>
+                <Tooltip tip={myChar ? `+ ${myChar.perk} · − ${myChar.flaw}` : undefined} position="bottom">
+                  <div className="cursor-help text-xs font-semibold text-ink-soft underline decoration-dotted underline-offset-2">
+                    {myChar ? `${myChar.name} · ${myChar.perk}` : "Pemain"}
+                  </div>
+                </Tooltip>
               </div>
               <div className="text-right">
                 <div className="text-[11px] font-semibold text-ink-soft">Cash kamu</div>

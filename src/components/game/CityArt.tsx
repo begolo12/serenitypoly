@@ -1,6 +1,7 @@
 "use client";
 
 import type { GroupId } from "@/engine/types";
+import { cn } from "@/lib/format";
 
 const INK = "#16142B";
 
@@ -411,5 +412,159 @@ export function BuildingBadge({ houses }: { houses: number }) {
         <span key={i} className="inline-block h-[0.55em] w-[0.55em] rounded-[2px] border border-ink bg-mint" />
       ))}
     </span>
+  );
+}
+
+function VehicleEmblem({ index }: { index: number }) {
+  const kind = index % 4;
+  if (kind === 0) {
+    // Bajaj Nusantara
+    return (
+      <g>
+        <path d="M19 31C19 23 24 19 31 19H38C42 19 44 22 44 26V33H19V31Z" fill="#FFFFFF" stroke={INK} strokeWidth="2.2" strokeLinejoin="round" />
+        <rect x="26" y="22" width="10" height="6" rx="1.5" fill="#DFE6FF" stroke={INK} strokeWidth="1.8" />
+        <circle cx="24" cy="35" r="3.4" fill="#FFD23F" stroke={INK} strokeWidth="2" />
+        <circle cx="39" cy="35" r="3.4" fill="#FFD23F" stroke={INK} strokeWidth="2" />
+      </g>
+    );
+  }
+  if (kind === 1) {
+    // Skuter Klasik
+    return (
+      <g>
+        <path d="M21 31H29L33 21H39" stroke={INK} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M20 27H28C31 27 32 32 36 32H43" fill="#FFFFFF" stroke={INK} strokeWidth="2.2" strokeLinejoin="round" />
+        <circle cx="39" cy="22" r="2.6" fill="#FFD23F" stroke={INK} strokeWidth="1.8" />
+        <circle cx="23" cy="35" r="3.5" fill="#FFFFFF" stroke={INK} strokeWidth="2" />
+        <circle cx="40" cy="35" r="3.5" fill="#FFFFFF" stroke={INK} strokeWidth="2" />
+      </g>
+    );
+  }
+  if (kind === 2) {
+    // Kapal Phinisi
+    return (
+      <g>
+        <path d="M20 33H44L40 38H24L20 33Z" fill="#16142B" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
+        <path d="M30 33V17L21 30H30Z" fill="#FFFFFF" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
+        <path d="M34 33V15L43 30H34Z" fill="#FFE4DD" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
+      </g>
+    );
+  }
+  // Kereta Ekspres
+  return (
+    <g>
+      <rect x="21" y="17" width="22" height="17" rx="5.5" fill="#FFFFFF" stroke={INK} strokeWidth="2.2" />
+      <rect x="24.5" y="20.5" width="15" height="6.5" rx="2" fill="#DFE6FF" stroke={INK} strokeWidth="1.8" />
+      <circle cx="26.5" cy="30.5" r="1.8" fill="#FFD23F" stroke={INK} strokeWidth="1.3" />
+      <circle cx="37.5" cy="30.5" r="1.8" fill="#FFD23F" stroke={INK} strokeWidth="1.3" />
+      <path d="M23 37H41" stroke={INK} strokeWidth="2.2" strokeLinecap="round" />
+    </g>
+  );
+}
+
+/**
+ * 3D Tabletop Pawn Token SVG with pedestal base, glossy cap, and custom vehicle emblem.
+ */
+export function PawnToken({
+  index,
+  color,
+  className = "h-full w-full",
+}: {
+  index: number;
+  color: string;
+  className?: string;
+}) {
+  return (
+    <svg viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
+      {/* Ground ellipse shadow */}
+      <ellipse cx="32" cy="56" rx="19" ry="5.5" fill="rgba(22,20,43,0.28)" />
+      {/* 3D Pedestal skirt */}
+      <path
+        d="M14 48C14 42 20 38 32 38C44 38 50 42 50 48V52C50 55.5 42 58 32 58C22 58 14 55.5 14 52V48Z"
+        fill={color}
+        stroke={INK}
+        strokeWidth="3"
+      />
+      <ellipse cx="32" cy="48" rx="18" ry="6" fill="rgba(255,255,255,0.24)" stroke={INK} strokeWidth="2.5" />
+      {/* Neck stem */}
+      <rect x="25" y="34" width="14" height="13" rx="4" fill={color} stroke={INK} strokeWidth="2.8" />
+      {/* Main 3D disc head */}
+      <circle cx="32" cy="27" r="19" fill={color} stroke={INK} strokeWidth="3.2" />
+      {/* Glossy highlight arc */}
+      <path
+        d="M19 20C21.5 14.5 27.5 12 34 12.5"
+        stroke="#FFFFFF"
+        strokeWidth="3"
+        strokeLinecap="round"
+        opacity="0.72"
+      />
+      {/* Vehicle emblem */}
+      <VehicleEmblem index={index} />
+    </svg>
+  );
+}
+
+export function PawnAvatar({
+  index,
+  color,
+  size = 44,
+  className,
+}: {
+  index: number;
+  color: string;
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn("inline-flex shrink-0 items-center justify-center rounded-full border-[2.5px] border-ink bg-tint p-0.5", className)}
+      style={{ width: size, height: size }}
+    >
+      <PawnToken index={index} color={color} className="h-full w-full" />
+    </span>
+  );
+}
+
+export function BoardPawn({
+  index,
+  color,
+  name,
+  active,
+  hopping,
+  bankrupt,
+}: {
+  index: number;
+  color: string;
+  name: string;
+  active: boolean;
+  hopping: boolean;
+  bankrupt: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "group relative flex items-center justify-center",
+        bankrupt && "opacity-35 grayscale",
+        (active || hopping) && "animate-[pawn-bounce_0.85s_ease-in-out_infinite]",
+      )}
+      style={{ width: "clamp(22px, 3.1cqw, 38px)", height: "clamp(22px, 3.1cqw, 38px)" }}
+      title={name}
+    >
+      {active ? (
+        <span
+          className="pointer-events-none absolute -inset-1 rounded-full animate-[pulse-dot_1.4s_ease-out_infinite]"
+          aria-hidden="true"
+        />
+      ) : null}
+      <PawnToken index={index} color={color} className="h-full w-full drop-shadow-sm" />
+      {active ? (
+        <span
+          className="pointer-events-none absolute -top-[1.15em] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border-[1.5px] border-ink bg-ink px-1.5 py-[1px] font-bold leading-none text-sun"
+          style={{ fontSize: "0.72em" }}
+        >
+          {name}
+        </span>
+      ) : null}
+    </div>
   );
 }

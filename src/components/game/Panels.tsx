@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { CHARACTERS, GROUP_COLORS, GROUP_NAMES, GROUP_TILES, MISSIONS, TILES } from "@/engine/data";
 import {
   buildCost,
@@ -14,64 +15,121 @@ import {
 } from "@/engine/actions";
 import type { Action, GameState } from "@/engine/types";
 import { cn, rp } from "@/lib/format";
-import { REGION_LABELS, TileArtwork } from "@/components/game/CityArt";
-import { Button, Chip, Stat } from "@/components/ui/kit";
+import { PawnAvatar, REGION_LABELS, TileArtwork } from "@/components/game/CityArt";
+import { Button, Chip, Stat, Tooltip } from "@/components/ui/kit";
+
+export function useCashDeltas(state: GameState | null) {
+  const prevCashRef = useRef<Record<string, number>>({});
+  const [deltas, setDeltas] = useState<Record<string, { amount: number; seq: number }>>({});
+  const seqRef = useRef(0);
+  const sig = state ? state.players.map((p) => `${p.id}:${p.cash}`).join("|") : "";
+
+  useEffect(() => {
+    if (!state) return;
+    const next: Record<string, { amount: number; seq: number }> = {};
+    let hasNew = false;
+    for (const p of state.players) {
+      const prev = prevCashRef.current[p.id];
+      if (prev !== undefined && prev !== p.cash) {
+        seqRef.current += 1;
+        next[p.id] = { amount: p.cash - prev, seq: seqRef.current };
+        hasNew = true;
+      }
+      prevCashRef.current[p.id] = p.cash;
+    }
+    if (!hasNew) return;
+    setDeltas((cur) => ({ ...cur, ...next }));
+    const ids = Object.keys(next);
+    const t = window.setTimeout(() => {
+      setDeltas((cur) => {
+        const copy = { ...cur };
+        for (const id of ids) {
+          if (copy[id]?.seq === next[id].seq) delete copy[id];
+        }
+        return copy;
+      });
+    }, 1400);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sig]);
+
+  return deltas;
+}
 
 export function PlayerRail({ state, onInspect }: { state: GameState; onInspect: (id: string) => void }) {
   const cur = current(state);
+  const deltas = useCashDeltas(state);
+
   return (
     <div className="flex gap-2.5 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
-      {state.players.map((p) => {
+      {state.players.map((p, idx) => {
         const groups = ownedGroupCount(state, p.id);
         const active = cur?.id === p.id && state.phase !== "game_over";
+        const delta = deltas[p.id];
+        const charDef = CHARACTERS.find((c) => c.id === p.character);
+
         return (
-          <button
+          <Tooltip
             key={p.id}
-            onClick={() => onInspect(p.id)}
-            className={cn(
-              "relative min-w-[168px] flex-1 rounded-[22px] border-[3px] border-ink p-3 text-left transition-all duration-200",
-              active ? "bg-sun-pale -translate-y-0.5" : "bg-white hover:bg-tint",
-              p.bankrupt && "opacity-40 grayscale",
-            )}
+            tip={`Klik untuk lihat aset & karakter ${p.name}${charDef ? ` (${charDef.name})` : ""}`}
+            position="bottom"
+            className="min-w-[168px] flex-1 lg:w-full"
           >
-            <div className="flex items-center gap-2">
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-ink text-lg"
-                style={{ background: p.color }}
-              >
-                {p.token}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-display text-sm font-extrabold leading-tight text-ink">{p.name}</div>
-                <div className="text-[11px] font-semibold text-ink-soft">
-                  {p.isBot ? "Bot AI" : "Pemain"}
-                </div>
-              </div>
-              {active ? (
-                <span className="flex items-center gap-1 rounded-full border-2 border-ink bg-mint px-2 py-0.5 text-[10px] font-bold text-ink">
-                  <span className="h-1.5 w-1.5 rounded-full bg-ink" />
-                  Aktif
+            <button
+              onClick={() => onInspect(p.id)}
+              className={cn(
+                "relative w-full rounded-[22px] border-[3px] border-ink p-3 text-left transition-all duration-200",
+                active ? "bg-sun-pale -translate-y-0.5" : "bg-white hover:bg-tint",
+                p.bankrupt && "opacity-40 grayscale",
+              )}
+            >
+              {delta ? (
+                <span
+                  key={delta.seq}
+                  className={cn(
+                    "pointer-events-none absolute -top-3 right-3 z-20 rounded-full border-2 border-ink px-2 py-0.5 font-mono text-xs font-extrabold animate-[float-delta_1.35s_ease-out_forwards]",
+                    delta.amount > 0 ? "bg-mint text-ink" : "bg-tomato text-white",
+                  )}
+                >
+                  {delta.amount > 0 ? `+${rp(delta.amount)}` : `−${rp(Math.abs(delta.amount))}`}
                 </span>
               ) : null}
-            </div>
 
-            <div className="money mt-2 text-lg font-extrabold text-ink">{rp(p.cash)}</div>
+              <div className="flex items-center gap-2">
+                <PawnAvatar index={idx} color={p.color} size={38} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-display text-sm font-extrabold leading-tight text-ink">{p.name}</div>
+                  <div className="text-[11px] font-semibold text-ink-soft">
+                    {p.isBot ? "Bot AI" : "Pemain"}
+                    {charDef ? ` · ${charDef.name}` : ""}
+                  </div>
+                </div>
+                {active ? (
+                  <span className="flex items-center gap-1 rounded-full border-2 border-ink bg-mint px-2 py-0.5 text-[10px] font-bold text-ink">
+                    <span className="h-1.5 w-1.5 rounded-full bg-ink animate-[pulse-mint_1.5s_ease-out_infinite]" />
+                    Aktif
+                  </span>
+                ) : null}
+              </div>
 
-            <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] font-semibold">
-              <span className="rounded-full border border-ink/25 bg-tint px-2 py-0.5 text-ink">
-                {p.properties.length} petak
-              </span>
-              <span className="rounded-full border border-ink/25 bg-tint px-2 py-0.5 text-ink">
-                {groups} grup
-              </span>
-              {p.inJail ? <span className="rounded-full border border-ink bg-tomato px-2 py-0.5 text-white">Penjara</span> : null}
-              {p.jailCards > 0 ? <span className="rounded-full border border-ink bg-mint-pale px-2 py-0.5">🎟️ {p.jailCards}</span> : null}
-              {p.loans.length > 0 ? <span className="rounded-full border border-ink bg-tomato-pale px-2 py-0.5">💳 Utang</span> : null}
-              {p.shares.length > 0 ? <span className="rounded-full border border-ink bg-blue-pale px-2 py-0.5">📈 {p.shares.length}</span> : null}
-              {p.hand.length > 0 ? <span className="rounded-full border border-ink bg-sun-pale px-2 py-0.5">🃏 {p.hand.length}</span> : null}
-              {p.missionDone ? <span className="rounded-full border border-ink bg-sun px-2 py-0.5">★ Misi</span> : null}
-            </div>
-          </button>
+              <div className="money mt-2 text-lg font-extrabold text-ink">{rp(p.cash)}</div>
+
+              <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] font-semibold">
+                <span className="rounded-full border border-ink/25 bg-tint px-2 py-0.5 text-ink">
+                  {p.properties.length} petak
+                </span>
+                <span className="rounded-full border border-ink/25 bg-tint px-2 py-0.5 text-ink">
+                  {groups} grup
+                </span>
+                {p.inJail ? <span className="rounded-full border border-ink bg-tomato px-2 py-0.5 text-white">Penjara</span> : null}
+                {p.jailCards > 0 ? <span className="rounded-full border border-ink bg-mint-pale px-2 py-0.5">🎟️ {p.jailCards}</span> : null}
+                {p.loans.length > 0 ? <span className="rounded-full border border-ink bg-tomato-pale px-2 py-0.5">💳 Utang</span> : null}
+                {p.shares.length > 0 ? <span className="rounded-full border border-ink bg-blue-pale px-2 py-0.5">📈 {p.shares.length}</span> : null}
+                {p.hand.length > 0 ? <span className="rounded-full border border-ink bg-sun-pale px-2 py-0.5">🃏 {p.hand.length}</span> : null}
+                {p.missionDone ? <span className="rounded-full border border-ink bg-sun px-2 py-0.5">★ Misi</span> : null}
+              </div>
+            </button>
+          </Tooltip>
         );
       })}
     </div>
@@ -269,14 +327,16 @@ export function MissionCard({ state, seat }: { state: GameState; seat: number })
   if (!p || !features(state).missions) return null;
   const mission = MISSIONS.find((m) => m.id === p.mission);
   return (
-    <div className="rounded-[22px] border-[3px] border-ink bg-blue-pale p-3.5">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-[1px] text-blue">Misi rahasia</span>
-        {p.missionDone ? <Chip color="#2FD592">Selesai ✓</Chip> : <Chip color="#FFFFFF">Berjalan</Chip>}
+    <Tooltip tip="Misi rahasia memberi bonus Rp 150 dan +200 poin akhir bila selesai." position="top" className="w-full">
+      <div className="w-full rounded-[22px] border-[3px] border-ink bg-blue-pale p-3.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-[1px] text-blue">Misi rahasia</span>
+          {p.missionDone ? <Chip color="#2FD592">Selesai ✓</Chip> : <Chip color="#FFFFFF">Berjalan</Chip>}
+        </div>
+        <div className="mt-1.5 font-display text-base font-extrabold">{mission?.title}</div>
+        <p className="mt-0.5 text-xs font-medium text-ink-soft">{mission?.desc}</p>
       </div>
-      <div className="mt-1.5 font-display text-base font-extrabold">{mission?.title}</div>
-      <p className="mt-0.5 text-xs font-medium text-ink-soft">{mission?.desc}</p>
-    </div>
+    </Tooltip>
   );
 }
 
@@ -289,19 +349,15 @@ export function PlayerInspect({
   playerId: string;
   onClose: () => void;
 }) {
-  const p = playerOf(state, playerId);
+  const idx = state.players.findIndex((x) => x.id === playerId);
+  const p = idx >= 0 ? state.players[idx] : null;
   if (!p) return null;
   const character = CHARACTERS.find((c) => c.id === p.character);
   const groups = ownedGroupCount(state, p.id);
   return (
     <div className="space-y-3.5">
       <div className="flex items-center gap-3 rounded-2xl border-[2.5px] border-ink bg-tint p-3">
-        <div
-          className="flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-ink text-3xl"
-          style={{ background: p.color }}
-        >
-          {p.token}
-        </div>
+        <PawnAvatar index={idx} color={p.color} size={56} />
         <div>
           <div className="font-display text-xl font-extrabold leading-tight">{p.name}</div>
           <div className="text-xs font-semibold text-ink-soft">

@@ -52,6 +52,38 @@ export function Chip({
   );
 }
 
+export function Tooltip({
+  tip,
+  position = "top",
+  children,
+  className,
+}: {
+  tip?: string | null;
+  position?: "top" | "bottom";
+  children: ReactNode;
+  className?: string;
+}) {
+  if (!tip) return <>{children}</>;
+  const posCls =
+    position === "bottom"
+      ? "top-full left-1/2 mt-1.5 -translate-x-1/2"
+      : "bottom-full left-1/2 mb-1.5 -translate-x-1/2";
+  return (
+    <span className={cn("group/tip relative inline-flex", className)}>
+      {children}
+      <span
+        role="tooltip"
+        className={cn(
+          "pointer-events-none absolute z-[80] w-max max-w-[230px] rounded-xl border-2 border-ink bg-ink px-2.5 py-1.5 text-center text-[11px] font-semibold leading-snug text-white opacity-0 scale-95 transition-all duration-150 ease-out group-hover/tip:opacity-100 group-hover/tip:scale-100 group-focus-within/tip:opacity-100 group-focus-within/tip:scale-100",
+          posCls,
+        )}
+      >
+        {tip}
+      </span>
+    </span>
+  );
+}
+
 export function Modal({
   open,
   onClose,

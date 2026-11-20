@@ -12,7 +12,7 @@ import {
 import type { Action, GameState, GroupId, TradeOffer } from "@/engine/types";
 import { cn, rp } from "@/lib/format";
 import { PlayerInspect } from "@/components/game/Panels";
-import { TileArtwork } from "@/components/game/CityArt";
+import { PawnAvatar, TileArtwork } from "@/components/game/CityArt";
 import { Button, Chip, Modal } from "@/components/ui/kit";
 
 export function AuctionDialog({
@@ -57,7 +57,13 @@ export function AuctionDialog({
         >
           <div className="text-xs font-semibold text-ink-soft">Giliran menawar</div>
           <div className="mt-1 flex items-center gap-2">
-            {bidder ? <span className="text-2xl">{bidder.token}</span> : null}
+            {bidder ? (
+              <PawnAvatar
+                index={Math.max(0, state.players.findIndex((p) => p.id === bidder.id))}
+                color={bidder.color}
+                size={32}
+              />
+            ) : null}
             <div className="font-display text-xl font-extrabold">{bidder?.name ?? "—"}</div>
           </div>
           {bidder?.isBot ? (
@@ -618,15 +624,18 @@ export function ResultDialog({
             Klasemen lengkap
           </div>
           <div className="divide-y divide-divider">
-            {ranked.map((p, i) => (
-              <div key={p.id} className="flex items-center gap-2.5 px-3 py-2">
-                <span className="w-5 font-display text-sm font-extrabold">{i + 1}</span>
-                <span>{p.token}</span>
-                <span className="flex-1 truncate text-xs font-bold">{p.name}</span>
-                <span className="money text-xs text-ink-soft">{rp(p.cash)}</span>
-                <span className="money w-16 text-right text-xs font-extrabold">{scoreOf(state, p)}</span>
-              </div>
-            ))}
+            {ranked.map((p, i) => {
+              const seatIdx = Math.max(0, state.players.findIndex((x) => x.id === p.id));
+              return (
+                <div key={p.id} className="flex items-center gap-2.5 px-3 py-2">
+                  <span className="w-5 font-display text-sm font-extrabold">{i + 1}</span>
+                  <PawnAvatar index={seatIdx} color={p.color} size={24} className="border-[1.5px] p-0" />
+                  <span className="flex-1 truncate text-xs font-bold">{p.name}</span>
+                  <span className="money text-xs text-ink-soft">{rp(p.cash)}</span>
+                  <span className="money w-16 text-right text-xs font-extrabold">{scoreOf(state, p)}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
 

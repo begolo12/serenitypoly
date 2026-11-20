@@ -7,8 +7,8 @@ import { botAction } from "@/engine/bot";
 import { CHARACTERS, TILES, WAVE_LABEL } from "@/engine/data";
 import type { Action, GameState, Settings } from "@/engine/types";
 import { Board } from "@/components/game/Board";
-import { TileArtwork } from "@/components/game/CityArt";
-import { MissionCard, PlayerRail, PropertySheet, RentBreakdown } from "@/components/game/Panels";
+import { PawnAvatar, TileArtwork } from "@/components/game/CityArt";
+import { MissionCard, PlayerRail, PropertySheet, RentBreakdown, useCashDeltas } from "@/components/game/Panels";
 import {
   AuctionDialog,
   BankDialog,
@@ -20,7 +20,7 @@ import {
   ShopDialog,
   TradeDialog,
 } from "@/components/game/Dialogs";
-import { Button, Chip, Modal } from "@/components/ui/kit";
+import { Button, Chip, Modal, Tooltip } from "@/components/ui/kit";
 import { cn, rp } from "@/lib/format";
 import { initMute, isBgmPlaying, isMuted, setMuted, sfx, stopBgm, toggleBgm } from "@/lib/sfx";
 
@@ -194,44 +194,66 @@ export function GameScreen({
           </span>
         </div>
 
-        <Chip color="#FFD23F">
-          Ronde {state.round} · {waveText}
-        </Chip>
+        <Tooltip tip={`Fase ${waveText}: pengali sewa & aturan ekonomi saat ini`} position="bottom">
+          <Chip color="#FFD23F">
+            Ronde {state.round} · {waveText}
+          </Chip>
+        </Tooltip>
         <Chip color="#DFE6FF">{living(state).length} pemain aktif</Chip>
-        {state.event ? <Chip color="#FFE4DD" title={state.event.text}>⚡ {state.event.label}</Chip> : null}
+        {state.event ? (
+          <Tooltip tip={state.event.text} position="bottom">
+            <Chip color="#FFE4DD">⚡ {state.event.label}</Chip>
+          </Tooltip>
+        ) : null}
         {settings.turnTimer ? (
-          <Chip color={timer <= 5 ? "#FF5A3C" : "#EDEDF3"}>⏱ {Math.max(0, timer)}s</Chip>
+          <Tooltip tip="Batas waktu giliran aktif" position="bottom">
+            <Chip color={timer <= 5 ? "#FF5A3C" : "#EDEDF3"}>⏱ {Math.max(0, timer)}s</Chip>
+          </Tooltip>
         ) : null}
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("mission")}>
-            🎯 Misi
-          </Button>
-          <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("bank")}>
-            🏦 Bank
-          </Button>
-          {features(state).shop ? (
-            <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("shop")}>
-              🛒 Toko
+          <Tooltip tip="Lihat misi rahasiamu" position="bottom">
+            <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("mission")}>
+              🎯 Misi
             </Button>
+          </Tooltip>
+          <Tooltip tip="Ajukan pinjaman atau beli saham grup kota" position="bottom">
+            <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("bank")}>
+              🏦 Bank
+            </Button>
+          </Tooltip>
+          {features(state).shop ? (
+            <Tooltip tip="Beli & pakai kartu aksi spesial" position="bottom">
+              <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("shop")}>
+                🛒 Toko
+              </Button>
+            </Tooltip>
           ) : null}
-          <Button
-            variant="ghost"
-            className="min-h-0 px-3 py-1.5 text-xs"
-            disabled={!canAct}
-            onClick={() => openShared("trade")}
-          >
-            🤝 Dagang
-          </Button>
-          <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={handleBgm} aria-label="Musik latar" title="Musik latar">
-            {bgm ? "🎵" : "🎶"}
-          </Button>
-          <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={toggleMute} aria-label="Suara">
-            {muted ? "🔇" : "🔊"}
-          </Button>
-          <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={() => openShared("rules")}>
-            📖
-          </Button>
+          <Tooltip tip={canAct ? "Tawarkan barter properti atau uang ke pemain lain" : "Tunggu giliranmu untuk berdagang"} position="bottom">
+            <Button
+              variant="ghost"
+              className="min-h-0 px-3 py-1.5 text-xs"
+              disabled={!canAct}
+              onClick={() => openShared("trade")}
+            >
+              🤝 Dagang
+            </Button>
+          </Tooltip>
+          <Tooltip tip={bgm ? "Matikan musik latar" : "Putar musik latar"} position="bottom">
+            <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={handleBgm} aria-label="Musik latar">
+              {bgm ? "🎵" : "🎶"}
+            </Button>
+          </Tooltip>
+          <Tooltip tip={muted ? "Aktifkan efek suara" : "Bisukan efek suara"} position="bottom">
+            <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={toggleMute} aria-label="Suara">
+              {muted ? "🔇" : "🔊"}
+            </Button>
+          </Tooltip>
+          <Tooltip tip="Buku aturan ringkas" position="bottom">
+            <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={() => openShared("rules")}>
+              📖
+            </Button>
+          </Tooltip>
         </div>
       </header>
 
@@ -304,20 +326,33 @@ function TurnCard({ state }: { state: GameState }) {
   const me = current(state);
   const charObj = CHARACTERS.find((c) => c.id === me?.character);
   const posTile = me ? TILES[me.position] : TILES[0];
+  const deltas = useCashDeltas(state);
+  const delta = me ? deltas[me.id] : undefined;
   return (
-    <div className="panel p-4">
-      <div className="flex items-center gap-3">
-        <div
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[2.5px] border-ink text-2xl"
-          style={{ background: me?.color ?? "#FFD23F" }}
+    <div className="panel relative p-4">
+      {delta ? (
+        <span
+          key={delta.seq}
+          className={cn(
+            "pointer-events-none absolute -top-3 right-4 z-20 rounded-full border-2 border-ink px-2.5 py-0.5 font-mono text-xs font-extrabold animate-[float-delta_1.35s_ease-out_forwards]",
+            delta.amount > 0 ? "bg-mint text-ink" : "bg-tomato text-white",
+          )}
         >
-          {me?.token}
-        </div>
+          {delta.amount > 0 ? `+${rp(delta.amount)}` : `−${rp(Math.abs(delta.amount))}`}
+        </span>
+      ) : null}
+      <div className="flex items-center gap-3">
+        <PawnAvatar index={state.turnIndex} color={me?.color ?? "#FFD23F"} size={48} />
         <div className="min-w-0 flex-1">
           <div className="truncate font-display text-lg font-extrabold leading-tight">{me?.name}</div>
-          <div className="text-xs font-semibold text-ink-soft">
-            {me?.isBot ? "Bot AI" : "Pemain"} · {charObj?.name ?? me?.character}
-          </div>
+          <Tooltip
+            tip={charObj ? `+ ${charObj.perk} · − ${charObj.flaw}` : undefined}
+            position="bottom"
+          >
+            <div className="cursor-help text-xs font-semibold text-ink-soft underline decoration-dotted underline-offset-2">
+              {me?.isBot ? "Bot AI" : "Pemain"} · {charObj?.name ?? me?.character}
+            </div>
+          </Tooltip>
         </div>
         <div className="text-right">
           <div className="text-[11px] font-semibold text-ink-soft">Cash</div>
@@ -494,51 +529,77 @@ export function ActionPanel({
         Akhiri Giliran →
       </Button>
       <div className="grid grid-cols-2 gap-2">
-        <Button
-          className="min-h-0 px-3 py-2 text-xs"
-          disabled={!canAct || !nextBuildable}
-          onClick={() => {
-            if (nextBuildable !== undefined) {
-              setSelectedTile(nextBuildable);
-              onOpen("property");
-            }
-          }}
+        <Tooltip
+          tip={
+            !nextBuildable
+              ? "Perlu memiliki properti satu grup warna lengkap untuk membangun rumah/hotel"
+              : "Bangun rumah atau hotel di properti milikmu"
+          }
+          className="w-full"
         >
-          🏠 Bangun
-        </Button>
-        <Button
-          className="min-h-0 px-3 py-2 text-xs"
-          disabled={!canAct || !mortgageable}
-          onClick={() => {
-            if (mortgageable !== undefined) {
-              setSelectedTile(mortgageable);
-              onOpen("property");
-            }
-          }}
+          <Button
+            className="min-h-0 w-full px-3 py-2 text-xs"
+            disabled={!canAct || !nextBuildable}
+            onClick={() => {
+              if (nextBuildable !== undefined) {
+                setSelectedTile(nextBuildable);
+                onOpen("property");
+              }
+            }}
+          >
+            🏠 Bangun
+          </Button>
+        </Tooltip>
+        <Tooltip
+          tip={
+            !mortgageable
+              ? "Tidak ada properti bebas bangunan yang bisa digadaikan"
+              : "Gadaikan properti (tanpa bangunan) untuk menerima 50% dana cepat"
+          }
+          className="w-full"
         >
-          🏦 Gadai
-        </Button>
+          <Button
+            className="min-h-0 w-full px-3 py-2 text-xs"
+            disabled={!canAct || !mortgageable}
+            onClick={() => {
+              if (mortgageable !== undefined) {
+                setSelectedTile(mortgageable);
+                onOpen("property");
+              }
+            }}
+          >
+            🏦 Gadai
+          </Button>
+        </Tooltip>
         {!compact ? (
           <>
-            <Button className="min-h-0 px-3 py-2 text-xs" disabled={!canAct} onClick={() => onOpen("trade")}>
-              🤝 Dagang
-            </Button>
-            <Button className="min-h-0 px-3 py-2 text-xs" disabled={!canAct} onClick={() => onOpen("bank")}>
-              💳 Bank &amp; Saham
-            </Button>
-            {features(state).shop ? (
-              <Button className="min-h-0 px-3 py-2 text-xs" disabled={!canAct} onClick={() => onOpen("shop")}>
-                🛒 Pasar Loak
+            <Tooltip tip="Ajukan barter uang atau properti dengan pemain lain" className="w-full">
+              <Button className="min-h-0 w-full px-3 py-2 text-xs" disabled={!canAct} onClick={() => onOpen("trade")}>
+                🤝 Dagang
               </Button>
+            </Tooltip>
+            <Tooltip tip="Ambil pinjaman bank atau investasi saham grup warna" className="w-full">
+              <Button className="min-h-0 w-full px-3 py-2 text-xs" disabled={!canAct} onClick={() => onOpen("bank")}>
+                💳 Bank &amp; Saham
+              </Button>
+            </Tooltip>
+            {features(state).shop ? (
+              <Tooltip tip="Beli kartu taktis dari Pasar Loak" className="w-full">
+                <Button className="min-h-0 w-full px-3 py-2 text-xs" disabled={!canAct} onClick={() => onOpen("shop")}>
+                  🛒 Pasar Loak
+                </Button>
+              </Tooltip>
             ) : null}
-            <Button className="min-h-0 px-3 py-2 text-xs" onClick={() => onOpen("mission")}>
-              🎯 Misi
-            </Button>
+            <Tooltip tip="Cek target misi rahasiamu" className="w-full">
+              <Button className="min-h-0 w-full px-3 py-2 text-xs" onClick={() => onOpen("mission")}>
+                🎯 Misi
+              </Button>
+            </Tooltip>
           </>
         ) : null}
       </div>
       <p className="text-center text-xs font-medium text-ink-soft">
-        {me.isBot ? "Bot menyelesaikan giliran…" : "Ketuk salah satu petak di papan untuk mengelola kota."}
+        {me.isBot ? "Bot menyelesaikan giliran…" : "Arahkan kursor atau ketuk salah satu petak di papan."}
       </p>
     </div>
   );
