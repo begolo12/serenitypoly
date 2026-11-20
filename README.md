@@ -8,14 +8,25 @@ Papan monopoli **multiplayer 2–4 pemain** bertema seluruh Indonesia, dengan ga
 ![next](https://img.shields.io/badge/Next.js-16-black)
 ![license](https://img.shields.io/badge/license-MIT-yellow)
 
-## Mode yang tersedia
+**Live: https://serenitypoly.vercel.app**
+
+## Mode
 
 | Mode | Status | Keterangan |
 |---|---|---|
 | **Solo vs Bot** | ✅ | 1 manusia + 1–3 bot, tanpa internet |
 | **Satu Perangkat** | ✅ | 2–4 pemain bergiliran, layar "oper perangkat" |
-| Papan + HP (kontroler QR) | ⏳ | butuh server online |
-| Online jarak jauh | ⏳ | butuh Neon + deploy |
+| **Online** | ✅ | kode room 6 karakter + link/QR, 2–4 pemain jarak jauh |
+| **Papan + HP** | ✅ | buka papan di TV/laptop, semua pemain gabung dari HP lewat QR |
+| APK / Windows | ⏳ | butuh toolchain Android SDK / Tauri (belum dibangun) |
+
+### Cara main online
+
+1. Menu → **Online** → isi nama → **Buat Room Online**.
+2. Bagikan kode 6 karakter atau link/QR ke pemain lain (`/room/KODE`).
+3. Semua pemain menekan **Siap**, host menekan **Mulai Game**.
+4. Untuk mode papan: Menu → **Papan + HP** → **Buat Papan Tunggu**, tampilkan di TV/laptop, pemain scan QR dari HP.
+
 
 ## Fitur
 
@@ -44,11 +55,19 @@ npm start
 ```bash
 npx tsx scripts/sim.ts 300        # 300 game bot, cek invariant ekonomi & bangunan
 npx tsx scripts/feature-test.ts   # 27 tes aturan (bangun, sewa, saham, pinjaman, trade, PBB, krisis)
+node scripts/online-test.mjs http://localhost:3000   # E2E API online (room, join, siap, mulai, auth)
 npm run typecheck
 npm run build
 ```
 
-Hasil terakhir: **300/300 game selesai tanpa error invariant**, **27/27 tes aturan lulus**.
+Hasil terakhir: **300/300 game selesai tanpa error invariant**, **27/27 tes aturan lulus**, **E2E online lulus** (termasuk penolakan aksi di luar giliran dan token salah).
+
+## Arsitektur online
+
+- **Neon Postgres** (`ap-southeast-1`, Singapore) menyimpan room dan state game sebagai JSONB.
+- Aksi dikirim ke `/api/games/[code]`, divalidasi giliran + token kursi, lalu disimpan dengan pengunci versi.
+- Klien polling 1,2 detik (`?since=versi`) — cukup untuk game giliran dan jauh lebih murah dari WebSocket.
+- Papan besar (TV) membaca state yang sama tanpa panel privat.
 
 ## Papan
 
@@ -69,9 +88,10 @@ Transportasi: TransJakarta, KRL, MRT Jakarta, Kapal Pelni. Utilitas: PLN, PDAM.
 
 ```
 src/engine/         aturan murni (deterministik, tanpa DOM)
-src/components/     papan, panel, dialog, UI kit
-src/app/            halaman Next.js (menu, play, rules)
-scripts/            simulasi bot + tes aturan
+src/components/     papan, panel, dialog, UI kit, online game
+src/app/            halaman + API route (rooms, games)
+src/lib/            db/online helper, format, audio
+scripts/            simulasi bot, tes aturan, E2E online, init DB
 ```
 
 ## Lisensi
