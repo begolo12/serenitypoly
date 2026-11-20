@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { GROUP_COLORS, TILES, WAVE_LABEL } from "@/engine/data";
+import { groupComplete } from "@/engine/actions";
 import type { GameState, Tile } from "@/engine/types";
 import { cn, rp } from "@/lib/format";
+import { sfx } from "@/lib/sfx";
 
 export function cellOf(i: number): { col: number; row: number } {
   if (i === 0) return { col: 11, row: 11 };
@@ -43,8 +45,9 @@ function useAnimatedPositions(state: GameState) {
         timers.push(
           window.setTimeout(() => {
             posRef.current[p.id] = (cur + k) % 40;
+            sfx.step();
             force((v) => v + 1);
-          }, k * 150),
+          }, k * 140),
         );
       }
     }
@@ -54,6 +57,70 @@ function useAnimatedPositions(state: GameState) {
   }, [key]);
 
   return posRef.current;
+}
+
+const PIP_COORDS: Record<number, Array<[number, number]>> = {
+  1: [[50, 50]],
+  2: [
+    [28, 28],
+    [72, 72],
+  ],
+  3: [
+    [28, 28],
+    [50, 50],
+    [72, 72],
+  ],
+  4: [
+    [28, 28],
+    [72, 28],
+    [28, 72],
+    [72, 72],
+  ],
+  5: [
+    [28, 28],
+    [72, 28],
+    [50, 50],
+    [28, 72],
+    [72, 72],
+  ],
+  6: [
+    [28, 24],
+    [72, 24],
+    [28, 50],
+    [72, 50],
+    [28, 76],
+    [72, 76],
+  ],
+};
+
+function DiceFace({ value, animate }: { value: number | null; animate: boolean }) {
+  const pips = value ? PIP_COORDS[value] ?? [] : [];
+  return (
+    <div
+      className={cn(
+        "relative flex items-center justify-center border-[3px] border-ink bg-paper shadow-[4px_4px_0_#0A0A0A]",
+        animate ? "animate-[dice-tumble_0.55s_ease-out]" : "",
+      )}
+      style={{ width: "3.3em", height: "3.3em" }}
+    >
+      {value ? (
+        <svg viewBox="0 0 100 100" className="h-full w-full">
+          <rect x="4" y="4" width="92" height="92" fill="#FFFDF5" />
+          {pips.map(([cx, cy], idx) => (
+            <circle
+              key={idx}
+              cx={cx}
+              cy={cy}
+              r={value === 1 ? 14 : 9.5}
+              fill={value === 1 ? "#FF4D4D" : "#0A0A0A"}
+            />
+          ))}
+        </svg>
+      ) : (
+        <span className="font-display text-lg opacity-30">?</span>
+      )}
+    </div>
+  );
 }
 
 function centerStyle(T: Tile): string {
@@ -92,6 +159,22 @@ export function Board({
 }) {
   const pos = useAnimatedPositions(state);
   const current = state.players[state.turnIndex];
+  const [rollKey, setRollKey] = useState(0);
+  const lastDiceSig = useRef("");
+
+  useEffect(() => {
+    const sig = state.dice
+      ? `${state.round}:${state.turnIndex}:${state.doubles}:${state.dice.join(",")}:${state.lastMove?.from ?? ""}:${state.lastMove?.to ?? ""}`
+      : "";
+    if (sig && sig !== lastDiceSig.current) {
+      lastDiceSig.current = sig;
+      setRollKey((k) => k + 1);
+    } else if (!sig) {
+      lastDiceSig.current = "";
+    }
+  }, [state.dice, state.round, state.turnIndex, state.doubles, state.lastMove?.from, state.lastMove?.to]);
+
+  const latestLog = state.log[state.log.length - 1];
 
   return (
     <div
@@ -104,7 +187,10 @@ export function Board({
           const st = state.tiles[tile.id];
           const owner = st.owner ? state.players.find((p) => p.id === st.owner) : null;
           const isMine = owner?.id === current?.id;
+          const isMonopoly = Boolean(tile.group && owner && groupComplete(state, tile.group, owner.id));
           const canClick = tile.type === "property" || tile.type === "transport" || tile.type === "utility";
+          const isCurrentTarget = current && !current.bankrupt && (pos[current.id] ?? current.position) === tile.id;
+
           return (
             <button
               key={tile.id}
@@ -113,6 +199,7 @@ export function Board({
                 "relative flex flex-col overflow-hidden text-left transition-[filter]",
                 canClick ? "cursor-pointer hover:brightness-95" : "cursor-default",
                 selected === tile.id ? "z-10 outline-[3px] outline-offset-[-3px] outline-ink" : "",
+                isCurrentTarget && "ring-2 ring-inset ring-yellow",
               )}
               style={{
                 gridColumn: col,
@@ -123,9 +210,19 @@ export function Board({
             >
               {tile.group ? (
                 <div
-                  className="h-[22%] w-full border-b-[2px] border-ink"
+                  className="relative flex h-[23%] w-full items-center justify-end border-b-[2px] border-ink px-[2px]"
                   style={{ background: GROUP_COLORS[tile.group] }}
-                />
+                >
+                  {isMonopoly ? (
+                    <span
+                      className="rounded-sm bg-ink px-[2px] font-bold leading-none text-yellow"
+                      style={{ fontSize: "0.62em" }}
+                      title="Monopoli aktif"
+                    >
+                      ★
+                    </span>
+                  ) : null}
+                </div>
               ) : null}
               <div className="flex flex-1 flex-col items-center justify-center gap-[1px] px-[2px] text-center leading-[1.05]">
                 <span className="text-[1.35em] leading-none">{tile.icon}</span>
@@ -133,89 +230,139 @@ export function Board({
                   {tile.short}
                 </span>
                 {tile.price ? (
-                  <span className="money opacity-70" style={{ fontSize: "0.72em" }}>
+                  <span className="money opacity-75" style={{ fontSize: "0.72em" }}>
                     {tile.price}
                   </span>
                 ) : null}
                 {tile.tax ? (
-                  <span className="money opacity-70" style={{ fontSize: "0.72em" }}>
+                  <span className="money font-bold text-white/95" style={{ fontSize: "0.72em" }}>
                     -{tile.tax}
                   </span>
                 ) : null}
               </div>
               {st.houses > 0 ? (
-                <div className="absolute right-[2px] top-[24%] flex gap-[1px] text-[0.8em] leading-none">
-                  {st.houses === 5 ? "🏨" : Array.from({ length: st.houses }).map((_, i) => <span key={i}>🏠</span>)}
+                <div
+                  className="absolute left-[2px] top-[25%] flex items-center gap-[1px] rounded-[2px] border border-ink bg-paper/95 px-[2px] py-[1px] leading-none shadow-[1px_1px_0_#0A0A0A]"
+                  style={{ fontSize: "0.74em" }}
+                >
+                  {st.houses === 5 ? (
+                    <span>🏨</span>
+                  ) : (
+                    Array.from({ length: st.houses }).map((_, i) => (
+                      <span key={i} className="inline-block h-[0.65em] w-[0.65em] border border-ink bg-mint" />
+                    ))
+                  )}
                 </div>
               ) : null}
               {st.mortgaged ? (
-                <div className="absolute inset-0 flex items-center justify-center bg-ink/20">
-                  <span className="border-2 border-ink bg-surface px-[2px] font-bold" style={{ fontSize: "0.7em" }}>
+                <div className="absolute inset-0 flex items-center justify-center bg-ink/35">
+                  <span className="border-2 border-ink bg-surface px-[3px] font-bold" style={{ fontSize: "0.68em" }}>
                     GADAI
                   </span>
                 </div>
               ) : null}
               {owner ? (
                 <div
-                  className="absolute bottom-0 left-0 right-0 h-[16%] border-t-[2px] border-ink"
+                  className="absolute bottom-0 left-0 right-0 h-[17%] border-t-[2px] border-ink"
                   style={{ background: owner.color }}
                   title={owner.name}
                 />
               ) : null}
-              {isMine ? <div className="absolute left-0 top-0 h-[6px] w-[6px] border-b-2 border-r-2 border-ink bg-mint" /> : null}
+              {isMine ? (
+                <div className="absolute left-0 top-0 h-[7px] w-[7px] border-b-2 border-r-2 border-ink bg-mint" />
+              ) : null}
             </button>
           );
         })}
 
         <div
-          className="relative flex flex-col gap-2 overflow-hidden border-[3px] border-ink bg-paper p-2"
+          className="relative flex flex-col gap-1.5 overflow-hidden border-[3px] border-ink bg-paper p-2"
           style={{ gridColumn: "2 / 11", gridRow: "2 / 11" }}
         >
           <div className="flex items-start justify-between gap-2">
             <div>
-              <div className="font-display uppercase leading-none tracking-tighter" style={{ fontSize: "2.4em" }}>
+              <div className="font-display uppercase leading-none tracking-tighter" style={{ fontSize: "2.3em" }}>
                 Serenity<span className="bg-yellow px-1">Poly</span>
               </div>
-              <div className="mt-1 font-bold uppercase tracking-[0.12em] opacity-60" style={{ fontSize: "0.75em" }}>
+              <div className="mt-0.5 font-bold uppercase tracking-[0.12em] opacity-60" style={{ fontSize: "0.72em" }}>
                 Dari Sabang sampai Jayapura
               </div>
             </div>
             <div className="flex flex-col items-end gap-1">
               <span className="chip" style={{ background: "#FFD43B" }}>
-                R{state.round} · {WAVE_LABEL[state.wave]}
+                R{state.round}/{state.settings.maxRounds} · {WAVE_LABEL[state.wave]}
               </span>
-              <span className="chip" style={{ background: "#EFE9DA" }}>
-                {state.phase === "auction" ? "LELANG" : current?.name}
-              </span>
+              <div className="flex items-center gap-1">
+                <span className="chip" style={{ background: "#EFE9DA" }}>
+                  🏠 {state.housesBank} · 🏨 {state.hotelsBank}
+                </span>
+                <span className="chip" style={{ background: current?.color ?? "#EFE9DA" }}>
+                  {state.phase === "auction" ? "LELANG" : current?.name}
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-1 items-stretch gap-2 overflow-hidden">
-            <div className="flex w-[34%] flex-col items-center justify-center gap-2 border-[3px] border-ink bg-surface p-2">
-              <div className="font-bold uppercase tracking-widest opacity-60" style={{ fontSize: "0.72em" }}>
-                Dadu
+          <div className="grid grid-cols-4 gap-1">
+            {([1, 2, 3, 4] as const).map((w) => (
+              <div
+                key={w}
+                className={cn(
+                  "border-[2px] border-ink px-1 py-[2px] text-center font-bold uppercase leading-none",
+                  state.wave === w ? "bg-yellow shadow-[2px_2px_0_#0A0A0A]" : state.wave > w ? "bg-mint/40 opacity-75" : "bg-muted/60 opacity-50",
+                )}
+                style={{ fontSize: "0.65em" }}
+              >
+                {WAVE_LABEL[w]}
               </div>
-              <div className="flex gap-2">
+            ))}
+          </div>
+
+          {latestLog ? (
+            <div
+              className={cn(
+                "flex items-center gap-1.5 border-[2px] border-ink px-2 py-1 font-bold leading-tight",
+                latestLog.tone === "warn"
+                  ? "bg-red/20"
+                  : latestLog.tone === "good"
+                    ? "bg-mint/30"
+                    : latestLog.tone === "money"
+                      ? "bg-yellow/40"
+                      : "bg-muted/70",
+              )}
+              style={{ fontSize: "0.84em" }}
+            >
+              <span className="shrink-0 bg-ink px-1 text-paper" style={{ fontSize: "0.8em" }}>
+                R{latestLog.round}
+              </span>
+              <span className="truncate">{latestLog.text}</span>
+            </div>
+          ) : null}
+
+          <div className="flex flex-1 items-stretch gap-2 overflow-hidden">
+            <div className="flex w-[35%] flex-col items-center justify-center gap-1.5 border-[3px] border-ink bg-surface p-2">
+              <div className="font-bold uppercase tracking-widest opacity-60" style={{ fontSize: "0.7em" }}>
+                Dadu {state.dice ? `(${state.dice[0] + state.dice[1]})` : ""}
+              </div>
+              <div key={rollKey} className="flex gap-2">
                 {[0, 1].map((i) => (
-                  <div
+                  <DiceFace
                     key={i}
-                    className={cn(
-                      "flex items-center justify-center border-[3px] border-ink bg-paper font-display shadow-[3px_3px_0_#0A0A0A]",
-                      state.dice ? "animate-[dice-tumble_0.6s_ease-out]" : "",
-                    )}
-                    style={{ width: "2.6em", height: "2.6em", fontSize: "1.6em" }}
-                  >
-                    {state.dice ? state.dice[i] : "·"}
-                  </div>
+                    value={state.dice ? state.dice[i] : null}
+                    animate={Boolean(state.dice && rollKey > 0)}
+                  />
                 ))}
               </div>
-              <div className="text-center font-bold uppercase tracking-wide opacity-70" style={{ fontSize: "0.7em" }}>
-                {state.doubles > 0 ? `Dobel ${state.doubles}×` : "—"}
+              <div className="text-center font-bold uppercase tracking-wide opacity-75" style={{ fontSize: "0.68em" }}>
+                {state.doubles > 0 ? `🔥 Dobel ${state.doubles}×` : state.dice ? "Hasil lemparan" : "Siap lempar"}
               </div>
             </div>
 
             <div className="flex flex-1 flex-col overflow-hidden border-[3px] border-ink bg-surface">
-              <div className="border-b-[3px] border-ink bg-ink px-2 py-1 font-bold uppercase tracking-widest text-paper" style={{ fontSize: "0.68em" }}>
+              <div
+                className="border-b-[3px] border-ink bg-ink px-2 py-1 font-bold uppercase tracking-widest text-paper"
+                style={{ fontSize: "0.68em" }}
+              >
                 Catatan Permainan
               </div>
               <div className="scroll-thin flex flex-1 flex-col-reverse gap-1 overflow-y-auto px-2 py-1">
@@ -250,7 +397,7 @@ export function Board({
             ))}
             {state.event ? (
               <span className="chip" style={{ background: "#FF8A3D" }} title={state.event.text}>
-                {state.event.label}
+                ⚡ {state.event.label}: {state.event.text}
               </span>
             ) : null}
             {state.players
@@ -271,24 +418,25 @@ export function Board({
             (q) => (pos[q.id] ?? q.position) === (pos[p.id] ?? p.position) && !q.bankrupt,
           );
           const order = sameTile.findIndex((q) => q.id === p.id);
-          const offset = (order - (sameTile.length - 1) / 2) * 1.1;
+          const offset = (order - (sameTile.length - 1) / 2) * 1.15;
+          const isTurn = current?.id === p.id && !p.bankrupt && state.phase !== "game_over";
           return (
             <div
               key={p.id}
               className={cn(
                 "absolute flex items-center justify-center rounded-full border-[2px] border-ink bg-surface shadow-[2px_2px_0_#0A0A0A] transition-all duration-150 ease-linear",
                 p.bankrupt && "opacity-30 grayscale",
-                current?.id === p.id && "ring-2 ring-ink",
+                isTurn && "ring-[3px] ring-yellow animate-[hop_0.9s_ease-in-out_infinite]",
               )}
               style={{
-                width: "clamp(14px, 2.2cqw, 26px)",
-                height: "clamp(14px, 2.2cqw, 26px)",
+                width: "clamp(15px, 2.3cqw, 28px)",
+                height: "clamp(15px, 2.3cqw, 28px)",
                 left: `calc(${((col - 0.5) / 11) * 100}% + ${offset}em)`,
-                top: `calc(${((row - 0.5) / 11) * 100}% - 0.4em)`,
+                top: `calc(${((row - 0.5) / 11) * 100}% - 0.35em)`,
                 transform: "translate(-50%, -50%)",
-                zIndex: 20 + idx,
+                zIndex: isTurn ? 35 : 20 + idx,
                 background: p.color,
-                fontSize: "clamp(8px, 1.2cqw, 14px)",
+                fontSize: "clamp(8px, 1.25cqw, 15px)",
               }}
               title={p.name}
             >

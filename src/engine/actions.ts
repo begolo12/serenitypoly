@@ -141,8 +141,9 @@ export function rentFor(
 
   let effectMult = 1;
   for (const e of s.effects) {
-    if (e.kind === "rent_mult") effectMult *= e.mult ?? 1;
-    if (e.kind === "rent_mult" && e.tile === tileId) effectMult *= e.mult ?? 1;
+    if (e.kind === "rent_mult" && (e.tile === undefined || e.tile === tileId)) {
+      effectMult *= e.mult ?? 1;
+    }
   }
   const promo = s.effects.find((e) => e.kind === "rent_mult" && e.tile === tileId && (e.mult ?? 1) >= 3);
   if (promo) notes.push("Promosi ×3");
@@ -390,8 +391,7 @@ function applyCard(s: GameState, p: Player, card: CardDef) {
     }
     case "collect_all":
       for (const other of others) {
-        const got = pay(s, other, card.amount ?? 0, p, "solidaritas");
-        p.cash += got;
+        pay(s, other, card.amount ?? 0, p, "solidaritas");
       }
       break;
     case "pay_all":
@@ -942,6 +942,7 @@ export function applyAction(prev: GameState, action: Action): GameState {
     case "PAY_JAIL": {
       if (!p.inJail) break;
       const fine = p.character === "bandar" ? 100 : 50;
+      if (p.cash < fine) break;
       pay(s, p, fine, null, "denda penjara");
       p.inJail = false;
       p.jailTurns = 0;
@@ -1043,11 +1044,19 @@ export function applyAction(prev: GameState, action: Action): GameState {
         const tile = TILES[action.target];
         const st = s.tiles[action.target];
         if (st.houses >= 5) break;
+        if (st.houses === 4 && s.hotelsBank <= 0) break;
+        if (st.houses < 4 && s.housesBank <= 0) break;
         const cost = buildCost(s, tile.id, p);
         if (p.cash < cost) break;
         p.cash -= cost;
-        st.houses += 1;
-        s.housesBank -= 1;
+        if (st.houses === 4) {
+          s.housesBank += 4;
+          s.hotelsBank -= 1;
+          st.houses = 5;
+        } else {
+          s.housesBank -= 1;
+          st.houses += 1;
+        }
         p.hand.splice(idx, 1);
         pushLog(s, `${p.name} memakai Legalitas Cepat di ${tile.name}.`, "good");
       } else if (def.kind === "sogok") {

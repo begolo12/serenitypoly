@@ -66,17 +66,23 @@ export function PropertySheet({
   tileId,
   act,
   onClose,
+  viewerId,
+  canAct = true,
 }: {
   state: GameState;
   tileId: number;
   act: (a: Action) => void;
   onClose: () => void;
+  viewerId?: string | null;
+  canAct?: boolean;
 }) {
   const tile = TILES[tileId];
   const st = state.tiles[tileId];
   const owner = playerOf(state, st.owner);
-  const me = current(state);
+  const turnPlayer = current(state);
+  const me = viewerId ? playerOf(state, viewerId) : turnPlayer;
   const mine = owner?.id === me?.id;
+  const myTurn = Boolean(me && turnPlayer?.id === me.id && canAct);
   const buyable = tile.price !== undefined;
   const group = tile.group;
   const complete = group ? groupComplete(state, group, me?.id ?? "") : false;
@@ -86,6 +92,7 @@ export function PropertySheet({
   const cost = buildCost(state, tileId, me ?? state.players[0]);
   const canBuild =
     mine &&
+    myTurn &&
     state.phase === "post_roll" &&
     complete &&
     st.houses < 5 &&
@@ -93,9 +100,9 @@ export function PropertySheet({
     (st.houses === 4 ? state.hotelsBank > 0 : state.housesBank > 0) &&
     st.houses <= minOther &&
     (me?.cash ?? 0) >= cost;
-  const canSell = mine && st.houses > 0 && st.houses >= maxOther;
-  const canMortgage = mine && st.houses === 0 && !st.mortgaged;
-  const canUnmortgage = mine && st.mortgaged && (me?.cash ?? 0) >= Math.ceil(((tile.price ?? 0) / 2) * 1.1);
+  const canSell = mine && myTurn && st.houses > 0 && st.houses >= maxOther;
+  const canMortgage = mine && myTurn && st.houses === 0 && !st.mortgaged;
+  const canUnmortgage = mine && myTurn && st.mortgaged && (me?.cash ?? 0) >= Math.ceil(((tile.price ?? 0) / 2) * 1.1);
 
   return (
     <div className="space-y-3">
@@ -181,17 +188,21 @@ export function PropertySheet({
             </Button>
             {!canBuild ? (
               <p className="mt-1 text-[10px] font-bold uppercase opacity-60">
-                {!complete
-                  ? "Butuh seluruh grup"
-                  : st.houses >= 5
-                    ? "Sudah hotel"
-                    : st.houses > minOther
-                      ? "Even-build: bangun grup lain dulu"
-                      : (me?.cash ?? 0) < cost
-                        ? `Butuh ${rp(cost)}`
-                        : st.mortgaged
-                          ? "Tebus gadai dulu"
-                          : "Stok bank habis"}
+                {!myTurn
+                  ? "Tunggu giliranmu"
+                  : state.phase !== "post_roll"
+                    ? "Lempar dadu dulu"
+                    : !complete
+                      ? "Butuh seluruh grup"
+                      : st.houses >= 5
+                        ? "Sudah hotel"
+                        : st.houses > minOther
+                          ? "Even-build: bangun grup lain dulu"
+                          : (me?.cash ?? 0) < cost
+                            ? `Butuh ${rp(cost)}`
+                            : st.mortgaged
+                              ? "Tebus gadai dulu"
+                              : "Stok bank habis"}
               </p>
             ) : null}
           </div>

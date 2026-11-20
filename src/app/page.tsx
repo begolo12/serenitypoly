@@ -118,13 +118,13 @@ export default function Home() {
     }
   };
 
-  const joinRoom = () => {
+  const joinRoom = (asTv = false) => {
     const code = joinCode.trim().toUpperCase();
     if (code.length < 4) {
       setNetErr("Kode room minimal 4 karakter");
       return;
     }
-    router.push(`/room/${code}`);
+    router.push(asTv ? `/watch/${code}` : `/room/${code}`);
   };
 
   return (
@@ -186,20 +186,44 @@ export default function Home() {
         <section className="panel mt-4 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-display text-xl uppercase leading-none">
-              {mode === "online" ? "Online" : "Papan + HP"}
+              {mode === "online" ? "Online" : "Papan + HP (1 Layar TV/Laptop)"}
             </h2>
             <Chip color="#3DDC97">SERVER AKTIF</Chip>
           </div>
           <p className="mt-1 text-[11px] font-bold uppercase opacity-60">
             {mode === "online"
               ? "Buat room, bagikan kode/link, main jarak jauh."
-              : "Buat room, tampilkan papan di TV/laptop, semua pemain gabung dari HP."}
+              : "Buka papan di TV/laptop, lalu scan QR atau masukkan kode room dari HP masing-masing pemain."}
           </p>
+
+          {mode === "controller" ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <div className="border-[2px] border-ink bg-yellow/40 p-2">
+                <div className="font-display text-[11px] uppercase">1. Buka di Laptop / TV</div>
+                <p className="mt-0.5 text-[11px] font-bold opacity-75">
+                  Klik &ldquo;Buat Papan Tunggu&rdquo; untuk menampilkan papan &amp; QR.
+                </p>
+              </div>
+              <div className="border-[2px] border-ink bg-sky/30 p-2">
+                <div className="font-display text-[11px] uppercase">2. Scan QR / Kode di HP</div>
+                <p className="mt-0.5 text-[11px] font-bold opacity-75">
+                  Hingga 4 pemain masuk dari HP (bisa tambah Bot juga).
+                </p>
+              </div>
+              <div className="border-[2px] border-ink bg-mint/40 p-2">
+                <div className="font-display text-[11px] uppercase">3. Main Bersama!</div>
+                <p className="mt-0.5 text-[11px] font-bold opacity-75">
+                  Layar TV/laptop jadi papan utama, tiap HP jadi kontroler.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
           {netErr ? (
             <div className="mt-2 border-[3px] border-ink bg-red/20 p-2 text-[11px] font-bold uppercase">{netErr}</div>
           ) : null}
           <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <div className="border-[3px] border-ink p-2">
+            <div className="border-[3px] border-ink p-3">
               <div className="text-[10px] font-bold uppercase tracking-widest opacity-60">Buat room</div>
               {mode === "online" ? (
                 <input
@@ -216,21 +240,33 @@ export default function Home() {
                 disabled={busy}
                 onClick={() => createRoom(mode === "controller")}
               >
-                {busy ? "Membuat…" : mode === "online" ? "Buat Room Online" : "Buat Papan Tunggu"}
+                {busy
+                  ? "Membuat…"
+                  : mode === "online"
+                    ? "Buat Room Online"
+                    : "📺 Buat Papan Tunggu di Layar Ini"}
               </Button>
             </div>
-            <div className="border-[3px] border-ink p-2">
-              <div className="text-[10px] font-bold uppercase tracking-widest opacity-60">Gabung</div>
+            <div className="border-[3px] border-ink p-3">
+              <div className="text-[10px] font-bold uppercase tracking-widest opacity-60">Gabung dengan Kode Room</div>
               <input
-                className="field mt-2 w-full text-sm uppercase"
-                placeholder="Kode room"
+                className="field mt-2 w-full font-mono text-sm uppercase tracking-widest"
+                placeholder="Masukkan 6 huruf kode room"
                 maxLength={6}
                 value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value)}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") joinRoom(false);
+                }}
               />
-              <Button className="mt-2 w-full text-sm" onClick={joinRoom}>
-                Gabung Room
-              </Button>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <Button variant="mint" className="w-full text-xs" onClick={() => joinRoom(false)}>
+                  📱 Gabung Kontroler (HP)
+                </Button>
+                <Button className="w-full text-xs" onClick={() => joinRoom(true)}>
+                  📺 Buka Layar Papan (TV)
+                </Button>
+              </div>
             </div>
           </div>
           <p className="mt-2 text-[10px] font-bold uppercase opacity-50">
@@ -345,12 +381,12 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mt-8 grid gap-3 sm:grid-cols-3">
-        {CHARACTERS.slice(0, 3).map((c) => (
+      <section className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {CHARACTERS.map((c) => (
           <div key={c.id} className="border-[3px] border-ink bg-surface p-3 shadow-[4px_4px_0_#0A0A0A]">
             <div className="font-display text-sm uppercase">{c.name}</div>
-            <p className="text-[11px] font-bold opacity-70">+ {c.perk}</p>
-            <p className="text-[11px] font-bold opacity-50">− {c.flaw}</p>
+            <p className="text-[11px] font-bold text-[#0a7a4a]">+ {c.perk}</p>
+            <p className="text-[11px] font-bold text-red opacity-80">− {c.flaw}</p>
           </div>
         ))}
       </section>

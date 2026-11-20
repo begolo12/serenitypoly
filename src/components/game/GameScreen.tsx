@@ -21,7 +21,7 @@ import {
 } from "@/components/game/Dialogs";
 import { Button, Chip, Modal } from "@/components/ui/kit";
 import { cn, rp } from "@/lib/format";
-import { initMute, isMuted, setMuted, sfx } from "@/lib/sfx";
+import { initMute, isBgmPlaying, isMuted, setMuted, sfx, stopBgm, toggleBgm } from "@/lib/sfx";
 
 export type PanelKind = "bank" | "shop" | "trade" | "mission" | "rules" | "property" | "result" | null;
 
@@ -44,12 +44,15 @@ export function GameScreen({
   const [selectedTile, setSelectedTile] = useState<number | null>(null);
   const [gateOpen, setGateOpen] = useState(settings.mode === "hotseat");
   const [muted, setMutedState] = useState(false);
+  const [bgm, setBgm] = useState(false);
   const [timer, setTimer] = useState(settings.turnTimer);
   const lastTurn = useRef<string>("");
 
   useEffect(() => {
     initMute();
     setMutedState(isMuted());
+    setBgm(isBgmPlaying());
+    return () => stopBgm();
   }, []);
 
   const act = useCallback((action: Action) => {
@@ -67,6 +70,13 @@ export function GameScreen({
       case "BUY_SHARE":
       case "BUY_SHOP":
         sfx.buy();
+        break;
+      case "BUILD":
+        sfx.build();
+        break;
+      case "BID":
+      case "PASS_BID":
+        sfx.auction();
         break;
       case "PAY_JAIL":
         sfx.jail();
@@ -157,6 +167,13 @@ export function GameScreen({
     const next = !muted;
     setMuted(next);
     setMutedState(next);
+    if (next) setBgm(false);
+  };
+
+  const handleBgm = () => {
+    const active = toggleBgm();
+    setBgm(active);
+    if (active) setMutedState(false);
   };
 
   const canAct = !isBot && !gateOpen && state.phase !== "auction" && !state.trade;
@@ -194,6 +211,9 @@ export function GameScreen({
             onClick={() => openShared("trade")}
           >
             🤝 Dagang
+          </Button>
+          <Button variant="ghost" className="px-2 text-xs" onClick={handleBgm} aria-label="Musik latar" title="Musik latar">
+            {bgm ? "🎵" : "🎶"}
           </Button>
           <Button variant="ghost" className="px-2 text-xs" onClick={toggleMute} aria-label="Suara">
             {muted ? "🔇" : "🔊"}
@@ -381,12 +401,13 @@ export function ActionPanel({
   }
 
   if (phase === "jail") {
+    const jailFine = me.character === "bandar" ? 100 : 50;
     return (
       <div className={cn("panel space-y-2 p-2")}>
         <div className="text-[10px] font-bold uppercase opacity-60">Kamu di penjara</div>
         <div className="grid grid-cols-3 gap-1">
-          <Button className="px-1 text-[10px]" disabled={!canAct || me.cash < 50} onClick={() => act({ type: "PAY_JAIL" })}>
-            Bayar 50
+          <Button className="px-1 text-[10px]" disabled={!canAct || me.cash < jailFine} onClick={() => act({ type: "PAY_JAIL" })}>
+            Bayar {jailFine}
           </Button>
           <Button
             className="px-1 text-[10px]"

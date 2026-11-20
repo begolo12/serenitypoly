@@ -1,26 +1,27 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { CHARACTERS, GROUP_COLORS, GROUP_NAMES, GROUP_TILES, MISSIONS, SHOP_CARDS, TILES } from "@/engine/data";
 import {
   current,
   features,
-  groupComplete,
   living,
-  netWorth,
   playerOf,
   scoreOf,
 } from "@/engine/actions";
 import type { Action, GameState, GroupId, TradeOffer } from "@/engine/types";
 import { cn, rp } from "@/lib/format";
-import { Button, Chip, Modal, Stat } from "@/components/ui/kit";
+import { PlayerInspect } from "@/components/game/Panels";
+import { Button, Chip, Modal } from "@/components/ui/kit";
 
 export function AuctionDialog({
   state,
   act,
+  viewerId,
 }: {
   state: GameState;
   act: (a: Action) => void;
+  viewerId?: string | null;
 }) {
   const [custom, setCustom] = useState("");
   const a = state.auction;
@@ -29,7 +30,8 @@ export function AuctionDialog({
   const bidder = playerOf(state, a.current);
   const leader = playerOf(state, a.leader);
   const step = Math.max(10, Math.round((tile.price ?? 100) * 0.1));
-  const isHuman = bidder && !bidder.isBot;
+  const isHumanBidder = Boolean(bidder && !bidder.isBot);
+  const canBid = viewerId ? Boolean(isHumanBidder && bidder?.id === viewerId) : isHumanBidder;
 
   return (
     <Modal open title={`Lelang · ${tile.name}`} onClose={() => {}} dismissable={false} width="max-w-md">
@@ -44,12 +46,21 @@ export function AuctionDialog({
             <div className="text-sm font-bold">{leader?.name ?? "—"}</div>
           </div>
         </div>
-        <div className="border-[3px] border-ink p-2">
+        <div className="border-[3px] border-ink p-2" style={bidder ? { borderLeft: `8px solid ${bidder.color}` } : undefined}>
           <div className="text-[10px] font-bold uppercase opacity-60">Giliran menawar</div>
-          <div className="font-display text-lg uppercase">{bidder?.name ?? "—"}</div>
-          {bidder?.isBot ? <div className="text-[11px] opacity-60">Bot sedang mempertimbangkan…</div> : null}
+          <div className="flex items-center gap-2">
+            {bidder ? <span className="text-xl">{bidder.token}</span> : null}
+            <div className="font-display text-lg uppercase">{bidder?.name ?? "—"}</div>
+          </div>
+          {bidder?.isBot ? (
+            <div className="text-[11px] opacity-60">Bot sedang mempertimbangkan…</div>
+          ) : !canBid ? (
+            <div className="text-[11px] font-bold uppercase opacity-60">
+              Menunggu {bidder?.name ?? "pemain"} menawar…
+            </div>
+          ) : null}
         </div>
-        {isHuman ? (
+        {canBid && bidder ? (
           <>
             <div className="grid grid-cols-3 gap-2">
               {[step, step * 2, step * 5].map((inc) => (
@@ -100,13 +111,16 @@ export function TradeDialog({
   act,
   open,
   onClose,
+  viewerId,
 }: {
   state: GameState;
   act: (a: Action) => void;
   open: boolean;
   onClose: () => void;
+  viewerId?: string | null;
 }) {
-  const me = current(state);
+  const turnPlayer = current(state);
+  const me = viewerId ? playerOf(state, viewerId) : turnPlayer;
   const others = living(state).filter((p) => p.id !== me?.id);
   const [target, setTarget] = useState(others[0]?.id ?? "");
   const [giveCash, setGiveCash] = useState(0);
@@ -114,21 +128,37 @@ export function TradeDialog({
   const [giveProps, setGiveProps] = useState<number[]>([]);
   const [wantProps, setWantProps] = useState<number[]>([]);
 
-  const to = playerOf(state, target);
+  const effectiveTarget = others.some((o) => o.id === target) ? target : (others[0]?.id ?? "");
+  const to = playerOf(state, effectiveTarget);
 
   if (state.trade) {
     const offer = state.trade;
     const from = playerOf(state, offer.from);
     const recipient = playerOf(state, offer.to);
+
+    if (viewerId && offer.to !== viewerId && offer.from !== viewerId) {
+      return null;
+    }
+
+    const canRespond = viewerId ? offer.to === viewerId : !recipient?.isBot;
+
     return (
-      <Modal open title="Tawaran Dagang" onClose={onClose} width="max-w-md">
+      <Modal
+        open
+        title={canRespond ? `Tawaran Dagang · ${recipient?.name}` : "Tawaran Dagang Terkirim"}
+        onClose={onClose}
+        dismissable={!canRespond}
+        width="max-w-md"
+      >
         <div className="space-y-3">
           <p className="text-sm">
             <b>{from?.name}</b> menawarkan ke <b>{recipient?.name}</b>
           </p>
           <div className="grid gap-2">
             <div className="border-[3px] border-ink bg-mint/20 p-2">
-              <div className="text-[10px] font-bold uppercase opacity-60">Kamu terima</div>
+              <div className="text-[10px] font-bold uppercase opacity-60">
+                {canRespond ? "Kamu terima" : `${recipient?.name} terima`}
+              </div>
               <div className="money text-sm font-bold">{rp(offer.giveCash)}</div>
               <div className="mt-1 flex flex-wrap gap-1">
                 {offer.giveProps.map((id) => (
@@ -140,7 +170,9 @@ export function TradeDialog({
               </div>
             </div>
             <div className="border-[3px] border-ink bg-red/10 p-2">
-              <div className="text-[10px] font-bold uppercase opacity-60">Kamu beri</div>
+              <div className="text-[10px] font-bold uppercase opacity-60">
+                {canRespond ? "Kamu beri" : `${recipient?.name} beri`}
+              </div>
               <div className="money text-sm font-bold">{rp(offer.wantCash)}</div>
               <div className="mt-1 flex flex-wrap gap-1">
                 {offer.wantProps.map((id) => (
@@ -151,14 +183,20 @@ export function TradeDialog({
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="mint" onClick={() => act({ type: "TRADE_RESPOND", accept: true })}>
-              Terima
-            </Button>
-            <Button variant="danger" onClick={() => act({ type: "TRADE_RESPOND", accept: false })}>
-              Tolak
-            </Button>
-          </div>
+          {canRespond ? (
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="mint" onClick={() => act({ type: "TRADE_RESPOND", accept: true })}>
+                Terima
+              </Button>
+              <Button variant="danger" onClick={() => act({ type: "TRADE_RESPOND", accept: false })}>
+                Tolak
+              </Button>
+            </div>
+          ) : (
+            <div className="border-[2px] border-ink bg-muted px-3 py-2 text-center text-xs font-bold uppercase">
+              Menunggu respon {recipient?.name}…
+            </div>
+          )}
         </div>
       </Modal>
     );
@@ -174,7 +212,15 @@ export function TradeDialog({
       <div className="space-y-3">
         <div>
           <label className="text-[10px] font-bold uppercase tracking-widest opacity-60">Lawan</label>
-          <select className="field mt-1 w-full text-sm" value={target} onChange={(e) => setTarget(e.target.value)}>
+          <select
+            className="field mt-1 w-full text-sm"
+            value={effectiveTarget}
+            onChange={(e) => {
+              setTarget(e.target.value);
+              setWantProps([]);
+              setWantCash(0);
+            }}
+          >
             {others.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} ({rp(p.cash)})
@@ -191,7 +237,7 @@ export function TradeDialog({
               min={0}
               max={me.cash}
               step={10}
-              value={giveCash}
+              value={Math.min(giveCash, me.cash)}
               onChange={(e) => setGiveCash(Number(e.target.value))}
               className="w-full"
             />
@@ -219,7 +265,7 @@ export function TradeDialog({
               min={0}
               max={to.cash}
               step={10}
-              value={wantCash}
+              value={Math.min(wantCash, to.cash)}
               onChange={(e) => setWantCash(Number(e.target.value))}
               className="w-full"
             />
@@ -257,6 +303,10 @@ export function TradeDialog({
               wantCards: 0,
             };
             act({ type: "TRADE_OFFER", offer });
+            setGiveCash(0);
+            setWantCash(0);
+            setGiveProps([]);
+            setWantProps([]);
           }}
         >
           Kirim Tawaran
@@ -271,14 +321,20 @@ export function ShopDialog({
   act,
   open,
   onClose,
+  viewerId,
+  canAct = true,
 }: {
   state: GameState;
   act: (a: Action) => void;
   open: boolean;
   onClose: () => void;
+  viewerId?: string | null;
+  canAct?: boolean;
 }) {
-  const me = current(state);
+  const turnPlayer = current(state);
+  const me = viewerId ? playerOf(state, viewerId) : turnPlayer;
   if (!me) return null;
+  const isTurn = viewerId ? Boolean(turnPlayer?.id === me.id && canAct) : canAct;
   const closed = state.effects.some((e) => e.kind === "shop_closed");
   const cards = state.shop.map((id) => SHOP_CARDS.find((c) => c.id === id)).filter(Boolean);
 
@@ -289,6 +345,11 @@ export function ShopDialog({
           <span>Cash {rp(me.cash)}</span>
           <span>Kartu di tangan {me.hand.length}/2</span>
         </div>
+        {!isTurn ? (
+          <p className="border-[2px] border-ink bg-muted p-2 text-[10px] font-bold uppercase">
+            Menunggu giliranmu untuk membeli atau memakai kartu Pasar Loak.
+          </p>
+        ) : null}
         {closed ? (
           <p className="border-[3px] border-ink bg-red/20 p-2 text-xs font-bold">Pasar Loak tutup ronde ini.</p>
         ) : null}
@@ -304,7 +365,13 @@ export function ShopDialog({
               </div>
               <Button
                 className="text-xs"
-                disabled={state.shopBought || closed || me.hand.length >= 2 || me.cash < (state.wave >= 3 ? c.priceLate : c.priceEarly)}
+                disabled={
+                  !isTurn ||
+                  state.shopBought ||
+                  closed ||
+                  me.hand.length >= 2 ||
+                  me.cash < (state.wave >= 3 ? c.priceLate : c.priceEarly)
+                }
                 onClick={() => act({ type: "BUY_SHOP", card: c.id })}
               >
                 {state.shopBought ? "Sudah beli" : "Beli"}
@@ -315,15 +382,15 @@ export function ShopDialog({
         {me.hand.length > 0 ? (
           <div className="border-[3px] border-ink bg-violet/10 p-2">
             <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Kartu kamu</div>
-            {me.hand.map((id) => {
+            {me.hand.map((id, idx) => {
               const c = SHOP_CARDS.find((x) => x.id === id);
-              const target = autoTarget(state, c?.kind ?? "");
+              const target = autoTarget(state, me.id, c?.kind ?? "");
               return (
-                <div key={id} className="flex items-center justify-between gap-2 py-1">
+                <div key={`${id}-${idx}`} className="flex items-center justify-between gap-2 py-1">
                   <span className="text-xs font-bold">{c?.name}</span>
                   <Button
                     className="text-[10px]"
-                    disabled={target === null}
+                    disabled={!isTurn || target === null}
                     onClick={() => act({ type: "USE_CARD", card: id, target: target ?? undefined })}
                   >
                     Pakai
@@ -338,8 +405,8 @@ export function ShopDialog({
   );
 }
 
-function autoTarget(state: GameState, kind: string): number | null {
-  const me = current(state);
+function autoTarget(state: GameState, playerId: string, kind: string): number | null {
+  const me = playerOf(state, playerId);
   if (!me) return null;
   if (kind === "promo" || kind === "legalitas") {
     const owned = me.properties
@@ -362,14 +429,20 @@ export function BankDialog({
   act,
   open,
   onClose,
+  viewerId,
+  canAct = true,
 }: {
   state: GameState;
   act: (a: Action) => void;
   open: boolean;
   onClose: () => void;
+  viewerId?: string | null;
+  canAct?: boolean;
 }) {
-  const me = current(state);
+  const turnPlayer = current(state);
+  const me = viewerId ? playerOf(state, viewerId) : turnPlayer;
   if (!me) return null;
+  const isTurn = viewerId ? Boolean(turnPlayer?.id === me.id && canAct) : canAct;
   const cap = state.wave === 1 ? 500 : 800;
   const debt = me.loans.reduce((a, l) => a + l.principal, 0);
   const room = Math.max(0, cap - debt);
@@ -382,6 +455,11 @@ export function BankDialog({
   return (
     <Modal open={open} onClose={onClose} title="Bank & Saham" width="max-w-lg">
       <div className="space-y-3">
+        {!isTurn ? (
+          <p className="border-[2px] border-ink bg-muted p-2 text-[10px] font-bold uppercase">
+            Tunggu giliranmu untuk bertransaksi dengan Bank.
+          </p>
+        ) : null}
         <div className="border-[3px] border-ink p-2">
           <div className="flex items-center justify-between">
             <div className="text-[10px] font-bold uppercase opacity-60">Pinjaman</div>
@@ -395,7 +473,7 @@ export function BankDialog({
               <Button
                 key={amount}
                 className="text-xs"
-                disabled={!features(state).loans || amount > room}
+                disabled={!isTurn || !features(state).loans || amount > room}
                 onClick={() => act({ type: "TAKE_LOAN", amount })}
               >
                 Pinjam {rp(amount)}
@@ -404,7 +482,7 @@ export function BankDialog({
             <Button
               variant="mint"
               className="text-xs"
-              disabled={debt === 0 || me.cash < debt}
+              disabled={!isTurn || debt === 0 || me.cash < debt}
               onClick={() => act({ type: "REPAY_LOAN" })}
             >
               Lunasi
@@ -431,13 +509,13 @@ export function BankDialog({
                 <span className="flex-1 text-[11px] font-bold">{GROUP_NAMES[g]}</span>
                 <span className="money text-[10px]">{rp(price)}</span>
                 {owned ? (
-                  <Button className="text-[10px]" onClick={() => act({ type: "SELL_SHARE", group: g })}>
+                  <Button className="text-[10px]" disabled={!isTurn} onClick={() => act({ type: "SELL_SHARE", group: g })}>
                     Jual
                   </Button>
                 ) : (
                   <Button
                     className="text-[10px]"
-                    disabled={!features(state).shares || state.wave < 2 || me.cash < price}
+                    disabled={!isTurn || !features(state).shares || state.wave < 2 || me.cash < price}
                     onClick={() => act({ type: "BUY_SHARE", group: g })}
                   >
                     Beli
@@ -477,7 +555,7 @@ export function ResultDialog({
         <div className="border-[3px] border-ink bg-yellow p-3 text-center">
           <div className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-60">Pemenang</div>
           <div className="font-display text-2xl uppercase leading-none">{winner?.name}</div>
-          <div className="money mt-1 text-lg font-bold">{rp(scoreOf(state, winner))} poin</div>
+          <div className="money mt-1 text-lg font-bold">{scoreOf(state, winner)} poin</div>
         </div>
         <div className="border-[3px] border-ink">
           <div className="border-b-[2px] border-ink bg-muted px-2 py-1 text-[10px] font-bold uppercase tracking-widest">
@@ -568,12 +646,14 @@ export function MissionDialog({
   state,
   open,
   onClose,
+  viewerId,
 }: {
   state: GameState;
   open: boolean;
   onClose: () => void;
+  viewerId?: string | null;
 }) {
-  const me = current(state);
+  const me = viewerId ? playerOf(state, viewerId) : current(state);
   const mission = MISSIONS.find((m) => m.id === me?.mission);
   return (
     <Modal open={open} onClose={onClose} title="Misi Rahasia" width="max-w-sm">
@@ -599,30 +679,11 @@ export function PlayerDetailDialog({
   playerId: string | null;
   onClose: () => void;
 }) {
-  const p = useMemo(() => (playerId ? playerOf(state, playerId) : null), [state, playerId]);
+  const p = playerId ? playerOf(state, playerId) : null;
   if (!p) return null;
   return (
     <Modal open title={`Pemain · ${p.name}`} onClose={onClose} width="max-w-md">
-      <div className="space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          <Stat label="Cash" value={rp(p.cash)} />
-          <Stat label="Net worth" value={rp(netWorth(state, p))} />
-          <Stat label="Skor" value={scoreOf(state, p)} />
-          <Stat label="Sewa diterima" value={rp(p.stats.rentEarned)} />
-        </div>
-        {p.properties.length ? (
-          <div className="flex flex-wrap gap-1">
-            {p.properties.map((id) => (
-              <Chip key={id} color={TILES[id].group ? GROUP_COLORS[TILES[id].group!] : undefined}>
-                {TILES[id].short}
-              </Chip>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs opacity-60">Belum punya properti.</p>
-        )}
-        {groupComplete(state, "brown", p.id) ? <p className="text-xs">Grup cokelat lengkap.</p> : null}
-      </div>
+      <PlayerInspect state={state} playerId={p.id} onClose={onClose} />
     </Modal>
   );
 }
