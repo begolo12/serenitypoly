@@ -23,7 +23,7 @@ import { Button, Chip, Modal } from "@/components/ui/kit";
 import { cn, rp } from "@/lib/format";
 import { initMute, isMuted, setMuted, sfx } from "@/lib/sfx";
 
-type PanelKind = "bank" | "shop" | "trade" | "mission" | "rules" | "property" | "result" | null;
+export type PanelKind = "bank" | "shop" | "trade" | "mission" | "rules" | "property" | "result" | null;
 
 export function GameScreen({
   settings,
@@ -308,7 +308,7 @@ function MiniStat({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-function ActionPanel({
+export function ActionPanel({
   state,
   act,
   canAct,

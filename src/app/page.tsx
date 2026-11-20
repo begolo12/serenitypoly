@@ -32,16 +32,12 @@ const MODES: {
     name: "Papan + HP",
     desc: "Papan di TV/laptop, HP jadi kontroler.",
     icon: "📱",
-    disabled: true,
-    reason: "Butuh server online (rilis R3)",
   },
   {
     id: "online",
     name: "Online",
     desc: "Kode room, pemain jarak jauh.",
     icon: "🌐",
-    disabled: true,
-    reason: "Butuh Neon + deploy (rilis R1 lanjutan)",
   },
 ];
 
@@ -52,6 +48,10 @@ export default function Home() {
   const [preset, setPreset] = useState<Preset>("standar");
   const [names, setNames] = useState<string[]>(["", "", "", ""]);
   const [hasSave, setHasSave] = useState(false);
+  const [hostName, setHostName] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [netErr, setNetErr] = useState("");
 
   useEffect(() => {
     initMute();
@@ -84,6 +84,47 @@ export default function Home() {
   const resume = () => {
     sessionStorage.setItem("sp-resume", "1");
     router.push("/play");
+  };
+
+  const createRoom = async (tv: boolean) => {
+    setBusy(true);
+    setNetErr("");
+    try {
+      const res = await fetch("/api/rooms", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          tv,
+          name: hostName.trim() || names[0]?.trim() || "Pemain 1",
+          settings: { preset, players: 4 },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Gagal membuat room");
+      if (tv) {
+        localStorage.setItem(`sp-host-${data.code}`, data.hostToken);
+        router.push(`/watch/${data.code}`);
+      } else {
+        localStorage.setItem(
+          `sp-seat-${data.code}`,
+          JSON.stringify({ playerId: data.playerId, token: data.token }),
+        );
+        router.push(`/room/${data.code}`);
+      }
+    } catch (e) {
+      setNetErr(e instanceof Error ? e.message : "Gagal membuat room");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const joinRoom = () => {
+    const code = joinCode.trim().toUpperCase();
+    if (code.length < 4) {
+      setNetErr("Kode room minimal 4 karakter");
+      return;
+    }
+    router.push(`/room/${code}`);
   };
 
   return (
@@ -141,6 +182,63 @@ export default function Home() {
         })}
       </section>
 
+      {(mode === "online" || mode === "controller") && (
+        <section className="panel mt-4 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-display text-xl uppercase leading-none">
+              {mode === "online" ? "Online" : "Papan + HP"}
+            </h2>
+            <Chip color="#3DDC97">SERVER AKTIF</Chip>
+          </div>
+          <p className="mt-1 text-[11px] font-bold uppercase opacity-60">
+            {mode === "online"
+              ? "Buat room, bagikan kode/link, main jarak jauh."
+              : "Buat room, tampilkan papan di TV/laptop, semua pemain gabung dari HP."}
+          </p>
+          {netErr ? (
+            <div className="mt-2 border-[3px] border-ink bg-red/20 p-2 text-[11px] font-bold uppercase">{netErr}</div>
+          ) : null}
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <div className="border-[3px] border-ink p-2">
+              <div className="text-[10px] font-bold uppercase tracking-widest opacity-60">Buat room</div>
+              {mode === "online" ? (
+                <input
+                  className="field mt-2 w-full text-sm"
+                  placeholder="Nama kamu"
+                  maxLength={20}
+                  value={hostName}
+                  onChange={(e) => setHostName(e.target.value)}
+                />
+              ) : null}
+              <Button
+                variant="primary"
+                className="mt-2 w-full text-sm"
+                disabled={busy}
+                onClick={() => createRoom(mode === "controller")}
+              >
+                {busy ? "Membuat…" : mode === "online" ? "Buat Room Online" : "Buat Papan Tunggu"}
+              </Button>
+            </div>
+            <div className="border-[3px] border-ink p-2">
+              <div className="text-[10px] font-bold uppercase tracking-widest opacity-60">Gabung</div>
+              <input
+                className="field mt-2 w-full text-sm uppercase"
+                placeholder="Kode room"
+                maxLength={6}
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+              />
+              <Button className="mt-2 w-full text-sm" onClick={joinRoom}>
+                Gabung Room
+              </Button>
+            </div>
+          </div>
+          <p className="mt-2 text-[10px] font-bold uppercase opacity-50">
+            Preset aturan yang dipakai: {preset}. Maksimal 4 pemain.
+          </p>
+        </section>
+      )}
+
       <section className="mt-6 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="panel p-4">
           <h2 className="font-display text-xl uppercase leading-none">Pemain</h2>
@@ -190,8 +288,13 @@ export default function Home() {
             })}
           </div>
 
-          <Button variant="primary" className="mt-4 w-full text-base" onClick={start}>
-            Mulai Permainan →
+          <Button
+            variant="primary"
+            className="mt-4 w-full text-base"
+            onClick={start}
+            disabled={mode === "online" || mode === "controller"}
+          >
+            {mode === "online" || mode === "controller" ? "Gunakan panel online di atas" : "Mulai Permainan →"}
           </Button>
         </div>
 
