@@ -3,15 +3,17 @@
 import { useEffect, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/format";
 
-type Variant = "primary" | "default" | "ghost" | "danger" | "mint" | "sky";
+type Variant = "primary" | "sun" | "default" | "ghost" | "danger" | "mint" | "sky" | "blue";
 
 const variantClass: Record<Variant, string> = {
   primary: "btn-primary",
+  sun: "btn-sun",
   default: "",
   ghost: "btn-ghost",
-  danger: "bg-red text-white",
-  mint: "bg-mint",
-  sky: "bg-sky",
+  danger: "bg-tomato text-white hover:brightness-105",
+  mint: "btn-mint",
+  sky: "btn-blue",
+  blue: "btn-blue",
 };
 
 export function Button({
@@ -38,9 +40,10 @@ export function Chip({
   className?: string;
   title?: string;
 }) {
+  const darkBg = color === "#2F5BFF" || color === "#FF5A3C" || color === "#7C4DFF" || color === "#16142B";
   return (
     <span
-      className={cn("chip", className)}
+      className={cn("chip", darkBg && "text-white", className)}
       style={color ? { background: color } : undefined}
       title={title}
     >
@@ -78,31 +81,31 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-ink/60 p-0 sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-ink/50 p-0 backdrop-blur-[2px] sm:items-center sm:p-6">
       <div
         className={cn(
-          "panel max-h-[92dvh] w-full overflow-hidden animate-[slide-up_0.24s_ease-out] sm:rounded-none",
+          "panel max-h-[92dvh] w-full overflow-hidden rounded-b-none animate-[pop_0.22s_var(--ease-out-soft)] sm:rounded-[28px]",
           width,
         )}
         role="dialog"
         aria-modal="true"
         aria-label={title}
       >
-        <header className="flex items-center justify-between gap-3 border-b-[3px] border-ink bg-yellow px-4 py-3">
-          <h2 className="font-display text-base uppercase tracking-tight">{title}</h2>
+        <header className="flex items-center justify-between gap-3 border-b-[2.5px] border-ink bg-sun px-5 py-3.5">
+          <h2 className="font-display text-lg font-extrabold tracking-tight">{title}</h2>
           {dismissable ? (
             <button
               onClick={onClose}
               aria-label="Tutup"
-              className="flex h-9 w-9 items-center justify-center border-[3px] border-ink bg-surface text-lg font-bold shadow-[2px_2px_0_#0A0A0A] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+              className="flex h-9 w-9 items-center justify-center rounded-full border-[2.5px] border-ink bg-white text-base font-bold transition-transform hover:scale-105 active:scale-95"
             >
               ✕
             </button>
           ) : null}
         </header>
-        <div className="scroll-thin max-h-[70dvh] overflow-y-auto px-4 py-4">{children}</div>
+        <div className="scroll-thin max-h-[70dvh] overflow-y-auto px-5 py-4">{children}</div>
         {footer ? (
-          <footer className="border-t-[3px] border-ink bg-muted px-4 py-3">{footer}</footer>
+          <footer className="border-t-[2.5px] border-ink bg-tint px-5 py-3">{footer}</footer>
         ) : null}
       </div>
     </div>
@@ -111,9 +114,12 @@ export function Modal({
 
 export function Stat({ label, value, accent }: { label: string; value: ReactNode; accent?: string }) {
   return (
-    <div className="border-[3px] border-ink bg-surface px-2 py-1.5" style={accent ? { background: accent } : undefined}>
-      <div className="text-[9px] font-bold uppercase tracking-[0.08em] opacity-70">{label}</div>
-      <div className="money text-sm font-bold">{value}</div>
+    <div
+      className="rounded-2xl border-[2.5px] border-ink bg-tint px-3 py-2"
+      style={accent ? { background: accent } : undefined}
+    >
+      <div className="text-[11px] font-semibold text-ink-soft">{label}</div>
+      <div className="money text-sm font-bold text-ink">{value}</div>
     </div>
   );
 }

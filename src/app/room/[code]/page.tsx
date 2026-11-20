@@ -180,13 +180,12 @@ export default function RoomPage() {
   }, [origin, isLocalhost, lanIp, useLan, code]);
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:py-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-60">Lobi Kontroler · Room</div>
-          <h1 className="font-display text-4xl uppercase leading-none tracking-wider">
-            {code.slice(0, 3)}
-            <span className="bg-yellow px-1.5">{code.slice(3)}</span>
+          <span className="sticker -rotate-2 bg-sun text-xs">Lobi Kontroler</span>
+          <h1 className="mt-2 font-display text-4xl font-extrabold tracking-wider">
+            Room <span className="rounded-xl border-2 border-ink bg-sun px-2.5 py-0.5 font-mono">{code}</span>
           </h1>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -199,7 +198,7 @@ export default function RoomPage() {
               window.setTimeout(() => setCopied(false), 1500);
             }}
           >
-            {copied ? "✓ Tersalin" : "Salin Link"}
+            {copied ? "✓ Link Tersalin" : "Salin Link"}
           </Button>
           <Button variant="ghost" className="text-xs" onClick={() => router.push(`/watch/${code}`)}>
             📺 Papan TV
@@ -211,27 +210,29 @@ export default function RoomPage() {
       </div>
 
       {err ? (
-        <div className="mt-3 border-[3px] border-ink bg-red/20 p-2 text-xs font-bold uppercase">{err}</div>
+        <div className="mt-4 rounded-2xl border-[2.5px] border-ink bg-tomato-pale px-4 py-2.5 text-xs font-bold">
+          ⚠️ {err}
+        </div>
       ) : null}
 
-      <section className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto]">
-        <div className="panel p-4">
+      <section className="mt-5 grid gap-5 sm:grid-cols-[1fr_auto]">
+        <div className="panel p-5">
           <div className="flex items-center justify-between">
-            <h2 className="font-display text-lg uppercase">Pemain ({room?.seats.length ?? 0}/4)</h2>
+            <h2 className="font-display text-xl font-extrabold">Pemain ({room?.seats.length ?? 0}/4)</h2>
             {isHost ? (
-              <div className="flex gap-1">
+              <div className="flex gap-1.5">
                 <Button
-                  className="min-h-0 px-2 py-1 text-[10px]"
+                  className="min-h-0 px-3 py-1.5 text-xs"
                   disabled={busy || (room?.seats.length ?? 0) >= 4}
-                  onClick={() => botAction({ addBot: true })}
+                  onClick={() => void botAction({ addBot: true })}
                 >
                   + Bot
                 </Button>
                 {hasBot ? (
                   <Button
-                    className="min-h-0 px-2 py-1 text-[10px]"
+                    className="min-h-0 px-3 py-1.5 text-xs"
                     disabled={busy}
-                    onClick={() => botAction({ removeBot: true })}
+                    onClick={() => void botAction({ removeBot: true })}
                   >
                     − Bot
                   </Button>
@@ -240,7 +241,7 @@ export default function RoomPage() {
             ) : null}
           </div>
 
-          <div className="mt-3 space-y-2">
+          <div className="mt-3 space-y-2.5">
             {[0, 1, 2, 3].map((i) => {
               const seat = room?.seats[i];
               const isMe = seat?.id === identity?.playerId;
@@ -248,23 +249,25 @@ export default function RoomPage() {
                 <div
                   key={i}
                   className={cn(
-                    "flex items-center gap-2 border-[3px] border-ink p-2",
-                    seat ? "bg-surface" : "border-dashed bg-muted/50",
-                    isMe && "bg-yellow/25",
+                    "flex items-center gap-2.5 rounded-2xl border-[2.5px] border-ink p-2.5",
+                    seat ? "bg-white" : "border-dashed bg-tint/60",
+                    isMe && "bg-sun-pale",
                   )}
-                  style={seat ? { borderLeft: `8px solid ${PLAYER_COLORS[i]}` } : undefined}
                 >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-ink text-sm" style={{ background: seat ? PLAYER_COLORS[i] : "#EFE9DA" }}>
+                  <span
+                    className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink text-sm font-bold"
+                    style={{ background: seat ? PLAYER_COLORS[i] : "#EDEDF3" }}
+                  >
                     {seat ? TOKENS[i] : i + 1}
                   </span>
                   <span className="flex-1 truncate text-sm font-bold">
                     {seat ? seat.name : "Menunggu pemain…"}
                     {isMe ? " (Kamu)" : ""}
                   </span>
-                  {seat?.isHost ? <Chip color="#FFD43B">HOST</Chip> : null}
-                  {seat?.isBot ? <Chip color="#9B7BFF">BOT</Chip> : null}
+                  {seat?.isHost ? <Chip color="#FFD23F">Host</Chip> : null}
+                  {seat?.isBot ? <Chip color="#DFE6FF">Bot</Chip> : null}
                   {seat ? (
-                    <Chip color={seat.ready ? "#3DDC97" : "#EFE9DA"}>{seat.ready ? "SIAP ✓" : "BELUM"}</Chip>
+                    <Chip color={seat.ready ? "#2FD592" : "#EDEDF3"}>{seat.ready ? "Siap ✓" : "Belum"}</Chip>
                   ) : null}
                 </div>
               );
@@ -272,67 +275,63 @@ export default function RoomPage() {
           </div>
 
           {!identity ? (
-            <div className="mt-4 space-y-2">
-              <div className="flex gap-2">
-                <input
-                  className="field flex-1 text-sm"
-                  placeholder="Nama kamu di game"
-                  maxLength={20}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !busy && (room?.seats.length ?? 0) < 4) void join();
-                  }}
-                />
-                <Button variant="primary" onClick={join} disabled={busy || (room?.seats.length ?? 0) >= 4}>
-                  Gabung
-                </Button>
-              </div>
+            <div className="mt-4 flex gap-2">
+              <input
+                className="field flex-1 text-sm"
+                placeholder="Nama panggilanmu"
+                maxLength={20}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !busy && (room?.seats.length ?? 0) < 4) void join();
+                }}
+              />
+              <Button variant="primary" onClick={join} disabled={busy || (room?.seats.length ?? 0) >= 4}>
+                Gabung
+              </Button>
             </div>
           ) : (
-            <div className="mt-4 space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant={me?.ready ? "default" : "primary"} onClick={toggleReady} disabled={busy}>
-                  {me?.ready ? "Batalkan Siap" : "✓ Saya Siap!"}
+            <div className="mt-4 grid grid-cols-2 gap-2.5">
+              <Button variant={me?.ready ? "default" : "sun"} onClick={toggleReady} disabled={busy}>
+                {me?.ready ? "Batalkan Siap" : "✓ Saya Siap!"}
+              </Button>
+              {isHost ? (
+                <Button
+                  variant="primary"
+                  onClick={() => start(!allReady)}
+                  disabled={busy || (room?.seats.length ?? 0) < 2}
+                >
+                  {allReady ? "▶ Mulai Game" : "▶ Mulai Sekarang"}
                 </Button>
-                {isHost ? (
-                  <Button
-                    variant="mint"
-                    onClick={() => start(!allReady)}
-                    disabled={busy || (room?.seats.length ?? 0) < 2}
-                  >
-                    {allReady ? "▶ Mulai Game" : "▶ Paksa Mulai"}
-                  </Button>
-                ) : (
-                  <div className="flex items-center justify-center border-[3px] border-dashed border-ink/40 px-2 text-center text-[10px] font-bold uppercase opacity-60">
-                    Menunggu host / TV memulai
-                  </div>
-                )}
-              </div>
+              ) : (
+                <div className="flex items-center justify-center rounded-full border-[2px] border-dashed border-ink/35 bg-tint px-3 text-center text-xs font-semibold text-ink-soft">
+                  Menunggu host memulai
+                </div>
+              )}
             </div>
           )}
 
-          <p className="mt-3 text-[10px] font-bold uppercase opacity-60">
+          <p className="mt-3 text-xs font-medium text-ink-soft">
             Minimal 2 pemain (atau 1 pemain + Bot), maksimal 4 pemain.
           </p>
         </div>
 
-        <div className="panel flex flex-col items-center gap-2 p-3">
-          <div className="text-[10px] font-bold uppercase tracking-widest opacity-60">Scan QR untuk Gabung</div>
+        <div className="panel flex flex-col items-center gap-2.5 bg-tint p-4">
+          <div className="text-xs font-bold uppercase tracking-[1px] text-ink-soft">Scan QR untuk gabung</div>
           {joinUrl ? <QrCode value={joinUrl} size={196} /> : null}
-          <div className="border-[2px] border-ink bg-yellow px-3 py-1 font-mono text-lg font-bold tracking-[0.2em]">
+          <div className="rounded-xl border-2 border-ink bg-sun px-3 py-1 font-mono text-lg font-extrabold tracking-[0.2em]">
             {code}
           </div>
           {isLocalhost && lanIp ? (
             <button
               type="button"
               onClick={() => setUseLan((v) => !v)}
-              className="border-2 border-ink bg-muted px-2 py-1 text-[10px] font-bold uppercase"
+              className="rounded-full border-2 border-ink bg-white px-3 py-1 text-[11px] font-bold"
             >
               {useLan ? `Wi-Fi LAN: ${lanIp}` : "Mode Localhost"} (Ganti)
             </button>
           ) : null}
-          <p className="max-w-[216px] break-all text-center text-[10px] font-bold opacity-60">{joinUrl}</p>
+          <p className="max-w-[216px] break-all text-center text-[11px] font-medium text-ink-soft">{joinUrl}</p>
         </div>
       </section>
     </main>

@@ -6,6 +6,7 @@ import type { Action, GameState } from "@/engine/types";
 import { current, features, groupComplete, living, netWorth, playerOf } from "@/engine/actions";
 import { CHARACTERS, GROUP_COLORS, PLAYER_COLORS, TILES, TOKENS, WAVE_LABEL } from "@/engine/data";
 import { Board } from "@/components/game/Board";
+import { TileArtwork } from "@/components/game/CityArt";
 import { PlayerRail, PropertySheet, RentBreakdown } from "@/components/game/Panels";
 import {
   AuctionDialog,
@@ -167,7 +168,6 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
     };
   }, [code]);
 
-  // Bot turn runner (TV screen or first living human client as fallback)
   useEffect(() => {
     if (!state || state.phase === "game_over") return;
     if (!pendingActorIsBot(state)) return;
@@ -209,7 +209,6 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
     return () => window.clearTimeout(t);
   }, [state, tv, code, identity]);
 
-  // Notify mobile controller when turn or auction/trade attention switches to them
   useEffect(() => {
     if (tv || !state || !identity?.playerId || state.phase === "game_over") return;
     const myId = identity.playerId;
@@ -305,9 +304,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
         tv={tv}
         identity={identity}
         onRoomUpdate={(r) => setRoom(r)}
-        onStartGame={() => {
-          /* polling will pick up game immediately */
-        }}
+        onStartGame={() => {}}
         onBack={() => router.push("/")}
       />
     );
@@ -318,6 +315,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
   const myPlayer = myId ? playerOf(state, myId) : null;
   const isMyTurn = Boolean(myId && me?.id === myId);
   const canAct = isMyTurn && !state.trade && state.phase !== "auction" && state.phase !== "game_over";
+  const waveText = WAVE_LABEL[state.wave].charAt(0) + WAVE_LABEL[state.wave].slice(1).toLowerCase();
 
   const joinBaseUrl = (() => {
     if (!origin) return "";
@@ -341,31 +339,37 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
     const meChar = CHARACTERS.find((c) => c.id === me?.character);
 
     return (
-      <main className="mx-auto flex min-h-dvh w-full max-w-[1600px] flex-col gap-2 p-2 md:p-4">
+      <main className="mx-auto flex min-h-dvh w-full max-w-[1600px] flex-col gap-3 px-3 py-2.5 md:px-5">
         <header className="flex flex-wrap items-center gap-2">
-          <div className="font-display text-xl uppercase leading-none tracking-tighter md:text-2xl">
-            Serenity<span className="bg-yellow px-1">Poly</span>
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl border-2 border-ink bg-sun text-sm">
+              🎲
+            </span>
+            <span className="font-display text-xl font-extrabold tracking-tight md:text-2xl">
+              Serenity<span className="text-tomato">Poly</span>
+            </span>
           </div>
-          <Chip color="#FFD43B">
-            Ronde {state.round}/{state.settings.maxRounds} · {WAVE_LABEL[state.wave]}
+          <Chip color="#FFD23F">
+            Ronde {state.round}/{state.settings.maxRounds} · {waveText}
           </Chip>
-          <Chip color="#EFE9DA">KODE {code}</Chip>
-          <Chip color={me?.color}>{me?.token} {me?.name} · giliran</Chip>
-          {state.event ? <Chip color="#FF8A3D">⚡ {state.event.label}</Chip> : null}
-          <div className="ml-auto flex flex-wrap items-center gap-1">
-            <Button className="px-2.5 text-xs" onClick={() => setQrModalOpen(true)}>
+          <Chip color="#DFE6FF">Kode {code}</Chip>
+          <Chip color={me?.color}>{me?.token} {me?.name} · Giliran</Chip>
+          {state.event ? <Chip color="#FFE4DD">⚡ {state.event.label}</Chip> : null}
+
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <Button className="min-h-0 px-3 py-1.5 text-xs" onClick={() => setQrModalOpen(true)}>
               📱 QR &amp; Kode
             </Button>
-            <Button variant="ghost" className="px-2 text-xs" onClick={handleBgm} title="Musik latar">
+            <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={handleBgm} title="Musik latar">
               {bgm ? "🎵" : "🎶"}
             </Button>
-            <Button variant="ghost" className="px-2 text-xs" onClick={toggleMute} title="Suara">
+            <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={toggleMute} title="Suara">
               {muted ? "🔇" : "🔊"}
             </Button>
-            <Button variant="ghost" className="px-2 text-xs" onClick={toggleFullscreen} title="Layar Penuh">
+            <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={toggleFullscreen} title="Layar Penuh">
               ⛶
             </Button>
-            <Button variant="ghost" className="px-2 text-xs" onClick={() => router.push("/")}>
+            <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => router.push("/")}>
               ← Menu
             </Button>
           </div>
@@ -387,77 +391,83 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
             />
           </main>
 
-          <aside className="flex w-full flex-col gap-2 lg:w-[320px] lg:shrink-0">
-            <div className="panel p-3" style={{ borderTop: `10px solid ${me?.color ?? "#0A0A0A"}` }}>
-              <div className="text-[10px] font-bold uppercase tracking-widest opacity-60">Sekarang bermain</div>
-              <div className="mt-1 flex items-center gap-2">
-                <span className="text-3xl">{me?.token}</span>
+          <aside className="flex w-full flex-col gap-3 lg:w-[320px] lg:shrink-0">
+            <div className="panel p-4">
+              <div className="text-xs font-bold text-ink-soft">Sekarang bermain</div>
+              <div className="mt-2 flex items-center gap-3">
+                <span
+                  className="flex h-12 w-12 items-center justify-center rounded-full border-[2.5px] border-ink text-2xl"
+                  style={{ background: me?.color ?? "#FFD23F" }}
+                >
+                  {me?.token}
+                </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-display text-xl uppercase leading-none">{me?.name}</div>
-                  <div className="text-[11px] font-bold uppercase opacity-60">
+                  <div className="truncate font-display text-xl font-extrabold leading-tight">{me?.name}</div>
+                  <div className="text-xs font-semibold text-ink-soft">
                     {me?.isBot ? "Bot AI" : "Kontroler HP"} · {meChar?.name}
                   </div>
                 </div>
               </div>
-              <div className="mt-2 flex items-baseline justify-between border-t-2 border-dashed border-ink/20 pt-2">
-                <span className="text-[10px] font-bold uppercase opacity-60">Cash</span>
-                <span className="money text-xl font-bold">{rp(me?.cash ?? 0)}</span>
+              <div className="mt-3 flex items-baseline justify-between rounded-2xl border-2 border-ink bg-tint px-3 py-2">
+                <span className="text-xs font-semibold text-ink-soft">Cash</span>
+                <span className="money text-xl font-extrabold text-[#0e8a5a]">{rp(me?.cash ?? 0)}</span>
               </div>
-              <div className="mt-1 flex items-baseline justify-between text-xs">
-                <span className="font-bold uppercase opacity-60">Posisi</span>
+              <div className="mt-2 flex items-baseline justify-between text-xs">
+                <span className="font-semibold text-ink-soft">Posisi saat ini</span>
                 <span className="font-bold">{me ? TILES[me.position].name : "—"}</span>
               </div>
               {me?.inJail ? (
-                <div className="mt-2 border-2 border-ink bg-red/20 px-2 py-1 text-[10px] font-bold uppercase">
+                <div className="mt-2 rounded-2xl border-2 border-ink bg-tomato-pale px-3 py-1.5 text-xs font-bold">
                   🚔 Di Penjara ({me.jailTurns}/3)
                 </div>
               ) : null}
             </div>
 
             {state.auction ? (
-              <div className="panel space-y-1.5 bg-yellow/40 p-3">
+              <div className="panel space-y-2 bg-sun-pale p-4">
                 <div className="flex items-center justify-between">
-                  <Chip color="#FF4D4D">🔨 LELANG LIVE</Chip>
-                  <span className="font-display text-sm uppercase">{TILES[state.auction.tile].name}</span>
+                  <Chip color="#FF5A3C">🔨 Lelang Live</Chip>
+                  <span className="font-display text-sm font-extrabold">{TILES[state.auction.tile].name}</span>
                 </div>
-                <div className="money text-2xl font-bold">{rp(state.auction.bid)}</div>
-                <div className="text-xs font-bold">
-                  Pemimpin: {tvAuctionLeader?.name ?? "Belum ada"} · Penawar: {tvAuctionBidder?.name ?? "—"}
+                <div className="money text-2xl font-extrabold">{rp(state.auction.bid)}</div>
+                <div className="text-xs font-semibold text-ink-soft">
+                  Pemimpin: <b className="text-ink">{tvAuctionLeader?.name ?? "Belum ada"}</b> · Penawar:{" "}
+                  <b className="text-ink">{tvAuctionBidder?.name ?? "—"}</b>
                 </div>
               </div>
             ) : state.trade ? (
-              <div className="panel space-y-1 bg-sky/25 p-3">
-                <Chip color="#4CC9F0">🤝 NEGOSIASI DAGANG</Chip>
-                <div className="text-xs font-bold">
+              <div className="panel space-y-1.5 bg-blue-pale p-4">
+                <Chip color="#2F5BFF">🤝 Negosiasi Dagang</Chip>
+                <div className="text-sm font-bold">
                   {tvTradeFrom?.name} ⇄ {tvTradeTo?.name}
                 </div>
-                <div className="text-[11px] opacity-75">Menunggu respon {tvTradeTo?.name} dari HP…</div>
+                <div className="text-xs font-medium text-ink-soft">Menunggu respon {tvTradeTo?.name} dari HP…</div>
               </div>
             ) : state.offer && tvOfferTile ? (
-              <div className="panel space-y-1 bg-mint/25 p-3">
+              <div className="panel space-y-2 bg-mint-pale p-4">
                 <div className="flex items-center justify-between">
-                  <Chip color="#3DDC97">🏷️ TAWARAN BELI</Chip>
-                  <span className="font-display text-sm uppercase">{tvOfferTile.name}</span>
+                  <Chip color="#2FD592">🏷️ Tawaran Beli</Chip>
+                  <span className="font-display text-sm font-extrabold">{tvOfferTile.name}</span>
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="money text-lg font-bold">{rp(state.offer.price)}</span>
-                  <span className="text-xs font-bold opacity-70">Sewa {rp(state.offer.rent)}</span>
+                  <span className="money text-lg font-extrabold">{rp(state.offer.price)}</span>
+                  <span className="text-xs font-semibold text-ink-soft">Sewa {rp(state.offer.rent)}</span>
                 </div>
-                <div className="text-[11px] font-bold opacity-65">Menunggu keputusan {me?.name}…</div>
+                <div className="text-xs font-medium text-ink-soft">Menunggu keputusan {me?.name}…</div>
               </div>
             ) : null}
 
             <RentBreakdown state={state} />
 
-            <div className="panel flex items-center gap-3 p-2.5">
+            <div className="panel flex items-center gap-3 bg-tint p-3">
               {joinBaseUrl ? <QrCode value={joinBaseUrl} size={96} /> : null}
               <div className="min-w-0 flex-1">
-                <div className="text-[9px] font-bold uppercase tracking-widest opacity-60">Gabung / Reconnect HP</div>
-                <div className="font-mono text-xl font-bold tracking-widest">{code}</div>
+                <div className="text-[11px] font-bold text-ink-soft">Gabung / Reconnect HP</div>
+                <div className="font-mono text-xl font-extrabold tracking-widest">{code}</div>
                 <button
                   type="button"
                   onClick={() => setQrModalOpen(true)}
-                  className="mt-1 border-2 border-ink bg-yellow px-2 py-0.5 text-[10px] font-bold uppercase"
+                  className="mt-1.5 rounded-full border-2 border-ink bg-sun px-3 py-1 text-[11px] font-bold"
                 >
                   Perbesar QR
                 </button>
@@ -486,10 +496,10 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
         <Modal open={qrModalOpen} onClose={() => setQrModalOpen(false)} title={`Sambungkan HP · Room ${code}`} width="max-w-sm">
           <div className="flex flex-col items-center gap-3 text-center">
             {joinBaseUrl ? <QrCode value={joinBaseUrl} size={220} /> : null}
-            <div className="border-[3px] border-ink bg-yellow px-4 py-1.5 font-mono text-2xl font-bold tracking-[0.25em]">
+            <div className="rounded-2xl border-[2.5px] border-ink bg-sun px-4 py-1.5 font-mono text-2xl font-extrabold tracking-[0.25em]">
               {code}
             </div>
-            <p className="break-all text-[11px] font-bold opacity-70">{joinBaseUrl}</p>
+            <p className="break-all text-xs font-medium text-ink-soft">{joinBaseUrl}</p>
           </div>
         </Modal>
         {state.phase === "game_over" ? (
@@ -504,23 +514,29 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
   const needsMyBid = Boolean(myId && state.auction?.current === myId);
   const needsMyTradeResp = Boolean(myId && state.trade?.to === myId);
   const isMyAction = isMyTurn || needsMyBid || needsMyTradeResp;
+  const canRollOnBoard = Boolean(canAct && (state.phase === "await_roll" || state.phase === "jail") && !state.offer);
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-[1600px] flex-col gap-2 p-2 md:p-3">
+    <div className="mx-auto flex min-h-dvh w-full max-w-[1600px] flex-col gap-2.5 px-3 py-2.5 md:px-5">
       <header className="flex flex-wrap items-center gap-1.5">
-        <div className="font-display text-base uppercase leading-none tracking-tighter md:text-xl">
-          Serenity<span className="bg-yellow px-1">Poly</span>
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg border-2 border-ink bg-sun text-xs">
+            🎲
+          </span>
+          <span className="font-display text-base font-extrabold tracking-tight md:text-xl">
+            Serenity<span className="text-tomato">Poly</span>
+          </span>
         </div>
-        <Chip color="#FFD43B">
-          R{state.round} · {WAVE_LABEL[state.wave]}
+        <Chip color="#FFD23F">
+          R{state.round} · {waveText}
         </Chip>
-        <Chip>Room {code}</Chip>
-        {state.event ? <Chip color="#FF8A3D">{state.event.label}</Chip> : null}
+        <Chip color="#DFE6FF">Room {code}</Chip>
+        {state.event ? <Chip color="#FFE4DD">⚡ {state.event.label}</Chip> : null}
         <div className="ml-auto flex flex-wrap items-center gap-1">
           {myPlayer ? (
             <Button
-              variant={showBoardOnMobile ? "primary" : "default"}
-              className="min-h-0 px-2 py-1 text-[11px]"
+              variant={showBoardOnMobile ? "sun" : "default"}
+              className="min-h-0 px-3 py-1 text-xs"
               onClick={() => setShowBoardOnMobile((v) => !v)}
             >
               {showBoardOnMobile ? "🎮 Kontroler" : "🗺️ Papan"}
@@ -542,15 +558,17 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
       </header>
 
       {err ? (
-        <div className="border-[3px] border-ink bg-red/20 px-2 py-1 text-[11px] font-bold uppercase">{err}</div>
+        <div className="rounded-2xl border-[2.5px] border-ink bg-tomato-pale px-3 py-2 text-xs font-bold">
+          ⚠️ {err}
+        </div>
       ) : null}
 
       {!myPlayer ? (
-        <section className="mx-auto mt-4 w-full max-w-lg space-y-3">
-          <div className="panel space-y-3 p-4">
-            <h2 className="font-display text-xl uppercase leading-none">Klaim Kursi Kontroler</h2>
-            <p className="text-xs font-bold opacity-70">
-              Pilih namamu di bawah untuk menyambungkan HP ini sebagai kontroler, atau buka tampilan papan TV.
+        <section className="mx-auto mt-3 w-full max-w-lg space-y-4">
+          <div className="panel space-y-3 p-5">
+            <h2 className="font-display text-2xl font-extrabold leading-tight">Klaim Kursi Kontroler</h2>
+            <p className="text-xs font-medium text-ink-soft">
+              Pilih namamu di bawah untuk menyambungkan HP ini sebagai kontroler, atau buka layar papan TV.
             </p>
             <div className="space-y-2">
               {state.players
@@ -560,15 +578,19 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
                     key={p.id}
                     disabled={busy}
                     onClick={() => void reclaimSeat(p.id)}
-                    className="flex w-full items-center gap-3 border-[3px] border-ink bg-surface p-3 text-left shadow-[3px_3px_0_#0A0A0A] hover:bg-yellow/40"
-                    style={{ borderLeft: `8px solid ${p.color}` }}
+                    className="flex w-full items-center gap-3 rounded-2xl border-[2.5px] border-ink bg-white p-3 text-left transition-colors hover:bg-sun-pale"
                   >
-                    <span className="text-2xl">{p.token}</span>
+                    <span
+                      className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-ink text-xl"
+                      style={{ background: p.color }}
+                    >
+                      {p.token}
+                    </span>
                     <div className="flex-1">
-                      <div className="font-display text-sm uppercase">{p.name}</div>
-                      <div className="money text-xs opacity-70">{rp(p.cash)}</div>
+                      <div className="font-display text-sm font-extrabold">{p.name}</div>
+                      <div className="money text-xs text-ink-soft">{rp(p.cash)}</div>
                     </div>
-                    <Chip color="#3DDC97">Masuk →</Chip>
+                    <Chip color="#2FD592">Masuk →</Chip>
                   </button>
                 ))}
             </div>
@@ -580,7 +602,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
           <Board state={state} selected={selectedTile} onSelect={() => {}} />
         </section>
       ) : showBoardOnMobile ? (
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-start">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
           <aside className="lg:w-[228px] lg:shrink-0">
             <PlayerRail state={state} onInspect={setInspectId} />
           </aside>
@@ -588,85 +610,87 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
             <Board
               state={state}
               selected={selectedTile}
+              onRoll={() => act({ type: "ROLL" })}
+              canRoll={canRollOnBoard}
               onSelect={(id) => {
                 setSelectedTile(id);
                 setPanel("property");
               }}
             />
           </main>
-          <aside className="flex w-full flex-col gap-2 lg:w-[320px] lg:shrink-0">
+          <aside className="flex w-full flex-col gap-3 lg:w-[320px] lg:shrink-0">
             <ActionPanel state={state} act={act} canAct={canAct} onOpen={setPanel} setSelectedTile={setSelectedTile} />
             <RentBreakdown state={state} />
           </aside>
         </div>
       ) : (
-        <div className="mx-auto flex w-full max-w-lg flex-col gap-2.5 pb-6">
+        <div className="mx-auto flex w-full max-w-lg flex-col gap-3 pb-6">
           <div
             className={cn(
-              "border-[3px] border-ink px-3 py-2 text-center font-display text-sm uppercase shadow-[4px_4px_0_#0A0A0A]",
+              "rounded-full border-[3px] border-ink px-4 py-2.5 text-center font-display text-sm font-extrabold",
               state.phase === "game_over"
-                ? "bg-yellow"
+                ? "bg-sun"
                 : isMyAction
-                  ? "animate-[pulse-ring_1.8s_ease-out_infinite] bg-mint"
-                  : "bg-muted",
+                  ? "animate-[pulse-mint_1.8s_ease-out_infinite] bg-mint"
+                  : "bg-tint text-ink-soft",
             )}
           >
             {state.phase === "game_over"
-              ? "🏆 Permainan Selesai"
+              ? "🏆 Permainan selesai"
               : needsMyBid
-                ? "🔨 Giliranmu Menawar di Lelang!"
+                ? "🔨 Giliranmu menawar di lelang!"
                 : needsMyTradeResp
-                  ? "🤝 Ada Tawaran Dagang untukmu!"
+                  ? "🤝 Ada tawaran dagang untukmu!"
                   : isMyTurn
-                    ? "🎲 GILIRANMU SEKARANG!"
+                    ? "🎲 Giliranmu sekarang!"
                     : `⏳ Menunggu giliran ${me?.name ?? "…"}`}
           </div>
 
-          <div className="panel p-3" style={{ borderTop: `10px solid ${myPlayer.color}` }}>
+          <div className="panel p-4">
             <div className="flex items-center gap-3">
               <div
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[3px] border-ink text-2xl shadow-[2px_2px_0_#0A0A0A]"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[2.5px] border-ink text-2xl"
                 style={{ background: myPlayer.color }}
               >
                 {myPlayer.token}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="truncate font-display text-lg uppercase leading-none">{myPlayer.name}</div>
-                <div className="mt-0.5 text-[11px] font-bold uppercase opacity-70">
+                <div className="truncate font-display text-lg font-extrabold leading-tight">{myPlayer.name}</div>
+                <div className="text-xs font-semibold text-ink-soft">
                   {myChar ? `${myChar.name} · ${myChar.perk}` : "Pemain"}
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-[9px] font-bold uppercase opacity-60">Cash Kamu</div>
-                <div className="money text-xl font-bold text-[#0a7a4a]">{rp(myPlayer.cash)}</div>
+                <div className="text-[11px] font-semibold text-ink-soft">Cash kamu</div>
+                <div className="money text-xl font-extrabold text-[#0e8a5a]">{rp(myPlayer.cash)}</div>
               </div>
             </div>
 
-            <div className="mt-2.5 grid grid-cols-3 gap-1.5 text-center">
-              <div className="border-2 border-ink bg-muted/60 px-1.5 py-1">
-                <div className="text-[8px] font-bold uppercase opacity-60">Posisi</div>
-                <div className="truncate text-[11px] font-bold">{TILES[myPlayer.position].short}</div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-2xl border-2 border-ink bg-tint px-2 py-1.5">
+                <div className="text-[10px] font-semibold text-ink-soft">Posisi</div>
+                <div className="truncate text-xs font-bold">{TILES[myPlayer.position].short}</div>
               </div>
-              <div className="border-2 border-ink bg-muted/60 px-1.5 py-1">
-                <div className="text-[8px] font-bold uppercase opacity-60">Net Worth</div>
-                <div className="money text-[11px] font-bold">{rp(netWorth(state, myPlayer))}</div>
+              <div className="rounded-2xl border-2 border-ink bg-tint px-2 py-1.5">
+                <div className="text-[10px] font-semibold text-ink-soft">Net worth</div>
+                <div className="money text-xs font-bold">{rp(netWorth(state, myPlayer))}</div>
               </div>
-              <div className="border-2 border-ink bg-muted/60 px-1.5 py-1">
-                <div className="text-[8px] font-bold uppercase opacity-60">Aset</div>
-                <div className="text-[11px] font-bold">{myPlayer.properties.length} petak</div>
+              <div className="rounded-2xl border-2 border-ink bg-tint px-2 py-1.5">
+                <div className="text-[10px] font-semibold text-ink-soft">Aset</div>
+                <div className="text-xs font-bold">{myPlayer.properties.length} petak</div>
               </div>
             </div>
 
-            <div className="mt-2 flex flex-wrap gap-1">
-              {myPlayer.inJail ? <Chip color="#FF4D4D">🚔 Di Penjara ({myPlayer.jailTurns}/3)</Chip> : null}
-              {myPlayer.jailCards > 0 ? <Chip color="#3DDC97">🎟️ Bebas Penjara ×{myPlayer.jailCards}</Chip> : null}
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {myPlayer.inJail ? <Chip color="#FF5A3C">🚔 Di Penjara ({myPlayer.jailTurns}/3)</Chip> : null}
+              {myPlayer.jailCards > 0 ? <Chip color="#2FD592">🎟️ Bebas Penjara ×{myPlayer.jailCards}</Chip> : null}
               {myPlayer.loans.length > 0 ? (
-                <Chip color="#FF7AC6">
+                <Chip color="#FFE4DD">
                   💳 Utang {rp(myPlayer.loans.reduce((a, l) => a + l.principal, 0))}
                 </Chip>
               ) : null}
-              {myPlayer.shares.length > 0 ? <Chip color="#4CC9F0">📈 {myPlayer.shares.length} Saham</Chip> : null}
-              {myPlayer.missionDone ? <Chip color="#FFD43B">⭐ Misi Selesai</Chip> : null}
+              {myPlayer.shares.length > 0 ? <Chip color="#DFE6FF">📈 {myPlayer.shares.length} Saham</Chip> : null}
+              {myPlayer.missionDone ? <Chip color="#FFD23F">⭐ Misi Selesai</Chip> : null}
             </div>
           </div>
 
@@ -679,22 +703,27 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
               setSelectedTile={setSelectedTile}
             />
           ) : (
-            <div className="panel space-y-2 p-3">
+            <div className="panel space-y-2.5 p-4">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-widest opacity-60">Info Giliran Aktif</span>
+                <span className="text-xs font-bold text-ink-soft">Info giliran aktif</span>
                 {state.dice ? (
-                  <Chip color="#FFD43B">
+                  <Chip color="#FFD23F">
                     🎲 {state.dice[0]} + {state.dice[1]} = {state.dice[0] + state.dice[1]}
                   </Chip>
                 ) : null}
               </div>
-              <div className="text-xs font-bold">
-                {me?.token} {me?.name} di <b>{me ? TILES[me.position].name : "—"}</b>
+              <div className="flex items-center gap-2.5 rounded-2xl border-2 border-ink bg-tint p-2.5">
+                <div className="h-9 w-9 shrink-0">
+                  <TileArtwork tileId={me?.position ?? 0} />
+                </div>
+                <div className="text-xs font-bold">
+                  {me?.token} {me?.name} sedang di <b>{me ? TILES[me.position].name : "—"}</b>
+                </div>
               </div>
-              <div className="space-y-1 border-t-2 border-dashed border-ink/20 pt-2">
+              <div className="space-y-1 divide-y divide-divider">
                 {state.log.slice(-3).reverse().map((entry) => (
-                  <div key={entry.id} className="text-[11px] leading-snug opacity-80">
-                    <span className="mr-1 font-mono opacity-50">R{entry.round}</span>
+                  <div key={entry.id} className="pt-1 text-xs text-ink-soft">
+                    <span className="mr-1.5 font-mono font-bold text-ink">R{entry.round}</span>
                     {entry.text}
                   </div>
                 ))}
@@ -704,7 +733,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
 
           <div className="grid grid-cols-2 gap-2">
             <Button
-              variant={showPropsTab ? "primary" : "default"}
+              variant={showPropsTab ? "sun" : "default"}
               className="text-xs"
               onClick={() => setShowPropsTab((v) => !v)}
             >
@@ -730,14 +759,14 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
           </div>
 
           {showPropsTab ? (
-            <div className="panel space-y-2 p-3">
-              <div className="text-[10px] font-bold uppercase tracking-widest opacity-60">
-                Daftar Propertimu (Ketuk untuk bangun / gadai)
+            <div className="panel space-y-2.5 p-4">
+              <div className="text-xs font-bold text-ink-soft">
+                Daftar propertimu (ketuk untuk bangun atau gadai)
               </div>
               {myPlayer.properties.length === 0 ? (
-                <p className="text-xs opacity-60">Belum punya properti.</p>
+                <p className="text-xs text-ink-soft">Belum memiliki properti.</p>
               ) : (
-                <div className="grid gap-1.5">
+                <div className="grid gap-2">
                   {myPlayer.properties.map((id) => {
                     const t = TILES[id];
                     const st = state.tiles[id];
@@ -749,22 +778,23 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
                           setSelectedTile(id);
                           setPanel("property");
                         }}
-                        className="flex items-center gap-2 border-[2px] border-ink bg-surface p-2 text-left hover:bg-yellow/25"
+                        className="flex items-center gap-2.5 rounded-2xl border-[2px] border-ink bg-white p-2.5 text-left transition-colors hover:bg-sun-pale"
                       >
-                        <span
-                          className="h-6 w-3 shrink-0 border border-ink"
-                          style={{ background: t.group ? GROUP_COLORS[t.group] : "#EFE9DA" }}
-                        />
-                        <span className="text-base">{t.icon}</span>
+                        <div
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border-2 border-ink p-1"
+                          style={{ background: t.group ? GROUP_COLORS[t.group] : "#DFE6FF" }}
+                        >
+                          <TileArtwork tileId={id} />
+                        </div>
                         <span className="flex-1 truncate text-xs font-bold">
                           {t.name}
                           {mono ? " ★" : ""}
                         </span>
                         {st.houses > 0 ? (
-                          <Chip color="#3DDC97">{st.houses === 5 ? "🏨" : `🏠×${st.houses}`}</Chip>
+                          <Chip color="#2FD592">{st.houses === 5 ? "★ Hotel" : `🏠×${st.houses}`}</Chip>
                         ) : null}
-                        {st.mortgaged ? <Chip color="#FF4D4D">GADAI</Chip> : null}
-                        <span className="text-[10px] font-bold uppercase opacity-60">Kelola →</span>
+                        {st.mortgaged ? <Chip color="#FF5A3C">Gadai</Chip> : null}
+                        <span className="text-xs font-bold text-blue">Kelola →</span>
                       </button>
                     );
                   })}
@@ -774,17 +804,17 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
           ) : null}
 
           {isMyTurn && !myPlayer.bankrupt && state.phase !== "game_over" ? (
-            <div className="pt-2">
+            <div className="pt-1">
               {!confirmSurrender ? (
                 <Button
                   variant="ghost"
-                  className="w-full text-[11px] text-red"
+                  className="w-full text-xs text-tomato"
                   onClick={() => setConfirmSurrender(true)}
                 >
                   🏳️ Menyerah
                 </Button>
               ) : (
-                <div className="flex gap-2 border-[2px] border-ink bg-red/15 p-2">
+                <div className="flex gap-2 rounded-2xl border-2 border-ink bg-tomato-pale p-2.5">
                   <Button
                     variant="danger"
                     className="flex-1 text-xs"
@@ -942,44 +972,47 @@ function WaitRoom({
   };
 
   return (
-    <main className={cn("mx-auto flex min-h-dvh w-full flex-col items-center justify-center gap-4 p-4", tv ? "max-w-4xl" : "max-w-xl")}>
+    <main className={cn("mx-auto flex min-h-dvh w-full flex-col items-center justify-center gap-5 px-4 py-6", tv ? "max-w-4xl" : "max-w-xl")}>
       <div className="text-center">
-        <div className="text-[11px] font-bold uppercase tracking-[0.25em] opacity-60">
+        <span className="sticker -rotate-2 bg-sun text-xs">
           {tv ? "Papan Tunggu · TV / Laptop" : "Menunggu Game Dimulai"}
-        </div>
-        <div className="mt-1 font-display text-5xl uppercase leading-none tracking-wider">
-          Kode <span className="border-[3px] border-ink bg-yellow px-3 py-0.5 shadow-[4px_4px_0_#0A0A0A]">{code}</span>
+        </span>
+        <div className="mt-3 font-display text-4xl font-extrabold tracking-tight sm:text-5xl">
+          Kode Room{" "}
+          <span className="inline-block rounded-2xl border-[3px] border-ink bg-sun px-4 py-1 font-mono tracking-[0.2em]">
+            {code}
+          </span>
         </div>
       </div>
 
       {err ? (
-        <div className="w-full max-w-2xl border-[3px] border-ink bg-red/20 p-2 text-center text-xs font-bold uppercase">
-          {err}
+        <div className="w-full max-w-2xl rounded-2xl border-[2.5px] border-ink bg-tomato-pale p-3 text-center text-xs font-bold">
+          ⚠️ {err}
         </div>
       ) : null}
 
-      <div className="grid w-full gap-4 md:grid-cols-[auto_1fr]">
-        <div className="panel flex flex-col items-center gap-2 p-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest opacity-60">Scan QR dari HP</div>
-          {computedUrl ? <QrCode value={computedUrl} size={tv ? 230 : 190} /> : null}
+      <div className="grid w-full gap-5 md:grid-cols-[auto_1fr]">
+        <div className="panel flex flex-col items-center gap-3 bg-tint p-5">
+          <div className="text-xs font-bold uppercase tracking-[1px] text-ink-soft">Scan QR dari HP</div>
+          {computedUrl ? <QrCode value={computedUrl} size={tv ? 225 : 190} /> : null}
           {isLocalhost && lanIp ? (
             <button
               type="button"
               onClick={() => setUseLan((v) => !v)}
-              className="border-2 border-ink bg-muted px-2 py-1 text-[10px] font-bold uppercase"
+              className="rounded-full border-2 border-ink bg-white px-3 py-1 text-[11px] font-bold"
             >
               {useLan ? `Wi-Fi LAN: ${lanIp}` : "Mode Localhost"} (Ganti)
             </button>
           ) : null}
-          <div className="flex w-full max-w-[250px] gap-1">
+          <div className="flex w-full max-w-[250px] gap-1.5">
             <input
-              className="field min-h-0 flex-1 px-2 py-1 text-[10px]"
+              className="field min-h-0 flex-1 px-3 py-1.5 text-[11px]"
               placeholder="URL kustom (opsional)"
               value={customUrl}
               onChange={(e) => setCustomUrl(e.target.value)}
             />
             <Button
-              className="min-h-0 px-2 py-1 text-[10px]"
+              className="min-h-0 px-3 py-1.5 text-[11px]"
               onClick={async () => {
                 await navigator.clipboard?.writeText(computedUrl);
                 setCopied(true);
@@ -990,17 +1023,17 @@ function WaitRoom({
               {copied ? "✓" : "Salin"}
             </Button>
           </div>
-          <div className="max-w-[250px] break-all text-center text-[10px] font-bold opacity-60">{computedUrl}</div>
+          <div className="max-w-[250px] break-all text-center text-[11px] font-medium text-ink-soft">{computedUrl}</div>
         </div>
 
-        <div className="panel flex flex-col justify-between gap-3 p-4">
+        <div className="panel flex flex-col justify-between gap-4 p-5">
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-display text-xl uppercase">Kursi Pemain ({seats.length}/4)</h2>
+              <h2 className="font-display text-2xl font-extrabold">Kursi Pemain ({seats.length}/4)</h2>
               {canManage ? (
                 <div className="flex gap-1.5">
                   <Button
-                    className="min-h-0 px-2.5 py-1 text-xs"
+                    className="min-h-0 px-3 py-1.5 text-xs"
                     disabled={busy || seats.length >= 4}
                     onClick={() => void botSeat({ addBot: true })}
                   >
@@ -1008,7 +1041,7 @@ function WaitRoom({
                   </Button>
                   {hasBot ? (
                     <Button
-                      className="min-h-0 px-2.5 py-1 text-xs"
+                      className="min-h-0 px-3 py-1.5 text-xs"
                       disabled={busy}
                       onClick={() => void botSeat({ removeBot: true })}
                     >
@@ -1019,37 +1052,36 @@ function WaitRoom({
               ) : null}
             </div>
 
-            <div className="mt-3 space-y-2">
+            <div className="mt-3 space-y-2.5">
               {[0, 1, 2, 3].map((i) => {
                 const s = seats[i];
                 return (
                   <div
                     key={i}
                     className={cn(
-                      "flex items-center gap-2 border-[3px] border-ink p-2.5",
-                      s ? "bg-surface" : "border-dashed bg-muted/40",
+                      "flex items-center gap-2.5 rounded-2xl border-[2.5px] border-ink p-2.5",
+                      s ? "bg-white" : "border-dashed bg-tint/60",
                     )}
-                    style={s ? { borderLeft: `8px solid ${PLAYER_COLORS[i]}` } : undefined}
                   >
                     <span
-                      className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink text-base"
-                      style={{ background: s ? PLAYER_COLORS[i] : "#EFE9DA" }}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink text-base font-bold"
+                      style={{ background: s ? PLAYER_COLORS[i] : "#EDEDF3" }}
                     >
                       {s ? TOKENS[i] : i + 1}
                     </span>
                     <span className="flex-1 truncate text-sm font-bold">
-                      {s ? s.name : "Scan QR atau masukkan kode di HP…"}
+                      {s ? s.name : "Scan QR atau ketik kode di HP…"}
                     </span>
-                    {s?.isHost ? <Chip color="#FFD43B">HOST</Chip> : null}
-                    {s?.isBot ? <Chip color="#9B7BFF">BOT</Chip> : null}
-                    {s ? <Chip color={s.ready ? "#3DDC97" : "#EFE9DA"}>{s.ready ? "SIAP ✓" : "BELUM"}</Chip> : null}
+                    {s?.isHost ? <Chip color="#FFD23F">Host</Chip> : null}
+                    {s?.isBot ? <Chip color="#DFE6FF">Bot</Chip> : null}
+                    {s ? <Chip color={s.ready ? "#2FD592" : "#EDEDF3"}>{s.ready ? "Siap ✓" : "Belum"}</Chip> : null}
                   </div>
                 );
               })}
             </div>
           </div>
 
-          <div className="space-y-2 border-t-[3px] border-ink pt-3">
+          <div className="space-y-2.5 border-t-[2px] border-divider pt-3">
             {canManage ? (
               <Button
                 variant="primary"
@@ -1068,19 +1100,19 @@ function WaitRoom({
                 📱 Masuk Lobi &amp; Gabung Kursi
               </Button>
             ) : (
-              <div className="border-[2px] border-ink bg-muted p-2 text-center text-xs font-bold uppercase">
+              <div className="rounded-2xl border-2 border-ink bg-tint p-3 text-center text-xs font-bold text-ink-soft">
                 Menunggu Host / Layar TV memulai game…
               </div>
             )}
-            <p className="text-center text-[10px] font-bold uppercase opacity-60">
-              Buka website ini di HP lalu masukkan kode <b>{code}</b> atau scan QR di samping.
+            <p className="text-center text-xs font-medium text-ink-soft">
+              Buka website ini di HP lalu masukkan kode <b className="font-mono text-ink">{code}</b> atau scan QR di samping.
             </p>
           </div>
         </div>
       </div>
 
-      <Button variant="ghost" className="text-xs" onClick={onBack}>
-        ← Kembali ke Menu
+      <Button variant="ghost" className="text-xs text-ink-soft" onClick={onBack}>
+        ← Kembali ke Menu Utama
       </Button>
     </main>
   );

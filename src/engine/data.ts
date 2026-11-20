@@ -12,14 +12,14 @@ import type {
 export const ENGINE_VERSION = "1.0.0";
 
 export const GROUP_COLORS: Record<GroupId, string> = {
-  brown: "#8B5E3C",
-  lightblue: "#7FD4F5",
-  pink: "#FF7AC6",
-  orange: "#FF9A3D",
-  red: "#FF4D4D",
-  yellow: "#FFD43B",
-  green: "#3DDC97",
-  darkblue: "#4C6FFF",
+  brown: "#B67C52",
+  lightblue: "#66CCFF",
+  pink: "#FF78C4",
+  orange: "#FF9240",
+  red: "#FF5A3C",
+  yellow: "#FFD23F",
+  green: "#2FD592",
+  darkblue: "#2F5BFF",
 };
 
 export const GROUP_NAMES: Record<GroupId, string> = {
@@ -33,7 +33,7 @@ export const GROUP_NAMES: Record<GroupId, string> = {
   darkblue: "Biru Tua",
 };
 
-export const PLAYER_COLORS = ["#FF4D4D", "#4CC9F0", "#FFD43B", "#9B7BFF"];
+export const PLAYER_COLORS = ["#FF5A3C", "#2F5BFF", "#FFD23F", "#2FD592"];
 
 export const TOKENS = ["🛺", "🛵", "⛵", "🚆", "🚲", "🚚", "🐴", "🚌"];
 

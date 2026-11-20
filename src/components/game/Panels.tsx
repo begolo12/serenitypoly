@@ -14,12 +14,13 @@ import {
 } from "@/engine/actions";
 import type { Action, GameState } from "@/engine/types";
 import { cn, rp } from "@/lib/format";
+import { REGION_LABELS, TileArtwork } from "@/components/game/CityArt";
 import { Button, Chip, Stat } from "@/components/ui/kit";
 
 export function PlayerRail({ state, onInspect }: { state: GameState; onInspect: (id: string) => void }) {
   const cur = current(state);
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
+    <div className="flex gap-2.5 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
       {state.players.map((p) => {
         const groups = ownedGroupCount(state, p.id);
         const active = cur?.id === p.id && state.phase !== "game_over";
@@ -28,30 +29,48 @@ export function PlayerRail({ state, onInspect }: { state: GameState; onInspect: 
             key={p.id}
             onClick={() => onInspect(p.id)}
             className={cn(
-              "relative min-w-[158px] flex-1 border-[3px] border-ink bg-surface p-2 text-left transition-transform",
-              active ? "translate-x-[-2px] translate-y-[-2px] shadow-[5px_5px_0_#0A0A0A]" : "shadow-[3px_3px_0_#0A0A0A]",
+              "relative min-w-[168px] flex-1 rounded-[22px] border-[3px] border-ink p-3 text-left transition-all duration-200",
+              active ? "bg-sun-pale -translate-y-0.5" : "bg-white hover:bg-tint",
               p.bankrupt && "opacity-40 grayscale",
             )}
-            style={{ borderTop: `10px solid ${p.color}` }}
           >
-            <div className="flex items-center gap-1.5">
-              <span className="text-lg leading-none">{p.token}</span>
-              <span className="truncate font-bold text-[13px]">{p.name}</span>
-              {p.isBot ? <Chip className="ml-auto">BOT</Chip> : null}
-              {active ? <Chip className="ml-auto" color="#FFD43B">GILIRAN</Chip> : null}
+            <div className="flex items-center gap-2">
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-ink text-lg"
+                style={{ background: p.color }}
+              >
+                {p.token}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-display text-sm font-extrabold leading-tight text-ink">{p.name}</div>
+                <div className="text-[11px] font-semibold text-ink-soft">
+                  {p.isBot ? "Bot AI" : "Pemain"}
+                </div>
+              </div>
+              {active ? (
+                <span className="flex items-center gap-1 rounded-full border-2 border-ink bg-mint px-2 py-0.5 text-[10px] font-bold text-ink">
+                  <span className="h-1.5 w-1.5 rounded-full bg-ink" />
+                  Aktif
+                </span>
+              ) : null}
             </div>
-            <div className="money mt-1 text-[15px] font-bold">{rp(p.cash)}</div>
-            <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] font-bold uppercase">
-              <span className="border-2 border-ink px-1">{p.properties.length} petak</span>
-              <span className="border-2 border-ink px-1">{groups} grup</span>
-              {p.inJail ? <span className="border-2 border-ink bg-red px-1 text-white">PENJARA</span> : null}
-              {p.jailCards > 0 ? <span className="border-2 border-ink bg-mint px-1">🎟️ {p.jailCards}</span> : null}
-              {p.loans.length > 0 ? <span className="border-2 border-ink bg-pink px-1">💳</span> : null}
-              {p.shares.length > 0 ? <span className="border-2 border-ink bg-sky px-1">📈 {p.shares.length}</span> : null}
-              {p.hand.length > 0 ? <span className="border-2 border-ink bg-violet px-1 text-white">🃏 {p.hand.length}</span> : null}
-              {p.missionDone ? <span className="border-2 border-ink bg-yellow px-1">★ misi</span> : null}
+
+            <div className="money mt-2 text-lg font-extrabold text-ink">{rp(p.cash)}</div>
+
+            <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] font-semibold">
+              <span className="rounded-full border border-ink/25 bg-tint px-2 py-0.5 text-ink">
+                {p.properties.length} petak
+              </span>
+              <span className="rounded-full border border-ink/25 bg-tint px-2 py-0.5 text-ink">
+                {groups} grup
+              </span>
+              {p.inJail ? <span className="rounded-full border border-ink bg-tomato px-2 py-0.5 text-white">Penjara</span> : null}
+              {p.jailCards > 0 ? <span className="rounded-full border border-ink bg-mint-pale px-2 py-0.5">🎟️ {p.jailCards}</span> : null}
+              {p.loans.length > 0 ? <span className="rounded-full border border-ink bg-tomato-pale px-2 py-0.5">💳 Utang</span> : null}
+              {p.shares.length > 0 ? <span className="rounded-full border border-ink bg-blue-pale px-2 py-0.5">📈 {p.shares.length}</span> : null}
+              {p.hand.length > 0 ? <span className="rounded-full border border-ink bg-sun-pale px-2 py-0.5">🃏 {p.hand.length}</span> : null}
+              {p.missionDone ? <span className="rounded-full border border-ink bg-sun px-2 py-0.5">★ Misi</span> : null}
             </div>
-            {active ? <div className="absolute -right-2 -top-2 h-3 w-3 animate-pulse rounded-full border-2 border-ink bg-mint" /> : null}
           </button>
         );
       })}
@@ -59,7 +78,7 @@ export function PlayerRail({ state, onInspect }: { state: GameState; onInspect: 
   );
 }
 
-const RENT_LABELS = ["Tanah", "1 rumah", "2 rumah", "3 rumah", "4 rumah", "Hotel"];
+const RENT_LABELS = ["Tanah kosong", "1 rumah", "2 rumah", "3 rumah", "4 rumah", "Hotel"];
 
 export function PropertySheet({
   state,
@@ -105,63 +124,71 @@ export function PropertySheet({
   const canUnmortgage = mine && myTurn && st.mortgaged && (me?.cash ?? 0) >= Math.ceil(((tile.price ?? 0) / 2) * 1.1);
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-stretch gap-2">
+    <div className="space-y-3.5">
+      <div className="flex items-center gap-3 rounded-2xl border-[2.5px] border-ink bg-tint p-3">
         <div
-          className="flex w-16 shrink-0 items-center justify-center border-[3px] border-ink text-2xl"
-          style={{ background: group ? GROUP_COLORS[group] : "#EFE9DA" }}
+          className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border-[2.5px] border-ink p-1.5"
+          style={{ background: group ? GROUP_COLORS[group] : "#FFF4C7" }}
         >
-          {tile.icon}
+          <TileArtwork tileId={tile.id} className="h-full w-full" />
         </div>
-        <div className="flex-1 border-[3px] border-ink bg-surface px-2 py-1.5">
-          <div className="font-display text-sm uppercase leading-tight">{tile.name}</div>
-          <div className="text-[11px] font-bold uppercase opacity-60">
-            {group ? `Grup ${GROUP_NAMES[group]}` : tile.type === "transport" ? "Transportasi" : "Utilitas"}
-            {owner ? ` · milik ${owner.name}` : " · belum dimiliki"}
+        <div className="min-w-0 flex-1">
+          <div className="font-display text-lg font-extrabold leading-tight">{tile.name}</div>
+          <div className="text-xs font-semibold text-ink-soft">
+            {group ? `${GROUP_NAMES[group]} · ${REGION_LABELS[group]}` : tile.type === "transport" ? "Transportasi" : "Utilitas"}
+          </div>
+          <div className="mt-1">
+            <Chip color={owner ? owner.color : "#FFF4C7"}>
+              {owner ? `Milik ${owner.name}` : "Belum dimiliki"}
+            </Chip>
           </div>
         </div>
       </div>
 
       {buyable ? (
-        <div className="grid grid-cols-2 gap-2">
-          <Stat label="Harga" value={rp(tile.price ?? 0)} />
-          <Stat label="Rumah/unit" value={tile.houseCost ? rp(tile.houseCost) : "—"} />
+        <div className="grid grid-cols-2 gap-2.5">
+          <Stat label="Harga beli" value={rp(tile.price ?? 0)} />
+          <Stat label="Biaya rumah" value={tile.houseCost ? rp(tile.houseCost) : "—"} />
         </div>
       ) : null}
 
       {tile.type === "property" && tile.rents ? (
-        <div className="border-[3px] border-ink">
-          <div className="border-b-[2px] border-ink bg-muted px-2 py-1 text-[10px] font-bold uppercase tracking-widest">
+        <div className="overflow-hidden rounded-2xl border-[2.5px] border-ink">
+          <div className="border-b-[2px] border-ink bg-tint px-3 py-1.5 text-xs font-bold text-ink-soft">
             Tabel sewa
           </div>
-          {tile.rents.map((rent, i) => (
-            <div
-              key={i}
-              className={cn(
-                "flex items-center justify-between border-b border-dashed border-ink/20 px-2 py-1 text-xs",
-                st.houses === i && "bg-yellow font-bold",
-              )}
-            >
-              <span>{RENT_LABELS[i]}</span>
-              <span className="money">{rp(rent)}</span>
-            </div>
-          ))}
+          <div className="divide-y divide-divider">
+            {tile.rents.map((rent, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "flex items-center justify-between px-3 py-1.5 text-xs",
+                  st.houses === i && "bg-sun-pale font-bold",
+                )}
+              >
+                <span>{RENT_LABELS[i]}</span>
+                <span className="money">{rp(rent)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
 
       {tile.type === "transport" ? (
-        <div className="border-[3px] border-ink px-2 py-2 text-xs">
+        <div className="rounded-2xl border-[2.5px] border-ink bg-blue-pale px-3 py-2.5 text-xs font-semibold">
           Sewa: 1 unit {rp(25)} · 2 {rp(50)} · 3 {rp(100)} · 4 {rp(200)}
         </div>
       ) : null}
 
       {tile.type === "utility" ? (
-        <div className="border-[3px] border-ink px-2 py-2 text-xs">Sewa: 4× mata dadu (1 utilitas) · 10× (2 utilitas)</div>
+        <div className="rounded-2xl border-[2.5px] border-ink bg-tint px-3 py-2.5 text-xs font-semibold">
+          Sewa: 4× mata dadu (1 utilitas) · 10× mata dadu (2 utilitas)
+        </div>
       ) : null}
 
       {group && mine ? (
-        <div className="border-[3px] border-ink bg-muted px-2 py-1.5 text-[11px] font-bold uppercase">
-          Rumah grup: {housesInGroup(state, group)} {complete ? "· MONOPOLI AKTIF" : "· belum lengkap"}
+        <div className="rounded-2xl border-[2px] border-ink bg-mint-pale px-3 py-2 text-xs font-bold">
+          Total bangunan grup: {housesInGroup(state, group)} {complete ? "· Monopoli aktif ★" : "· Belum lengkap"}
         </div>
       ) : null}
 
@@ -169,33 +196,23 @@ export function PropertySheet({
         <div className="grid grid-cols-2 gap-2">
           <div>
             <Button
+              variant="sun"
               className="w-full text-xs"
               disabled={!canBuild}
               onClick={() => act({ type: "BUILD", tile: tileId })}
-              title={
-                !complete
-                  ? "Butuh seluruh grup"
-                  : st.houses >= 5
-                    ? "Sudah hotel"
-                    : st.houses > minOther
-                      ? "Even-build: bangun grup lain dulu"
-                      : (me?.cash ?? 0) < cost
-                        ? `Butuh ${rp(cost)}`
-                        : undefined
-              }
             >
               {st.houses === 4 ? "Bangun Hotel" : "Bangun Rumah"} · {rp(cost)}
             </Button>
             {!canBuild ? (
-              <p className="mt-1 text-[10px] font-bold uppercase opacity-60">
+              <p className="mt-1 text-[11px] font-semibold text-ink-soft">
                 {!myTurn
                   ? "Tunggu giliranmu"
                   : state.phase !== "post_roll"
                     ? "Lempar dadu dulu"
                     : !complete
-                      ? "Butuh seluruh grup"
+                      ? "Butuh seluruh grup warna"
                       : st.houses >= 5
-                        ? "Sudah hotel"
+                        ? "Sudah mencapai Hotel"
                         : st.houses > minOther
                           ? "Even-build: bangun grup lain dulu"
                           : (me?.cash ?? 0) < cost
@@ -211,23 +228,22 @@ export function PropertySheet({
               className="w-full text-xs"
               disabled={!canSell}
               onClick={() => act({ type: "SELL_HOUSE", tile: tileId })}
-              title={canSell ? undefined : "Even-build: jual dari grup terbanyak"}
             >
               Jual Bangunan
             </Button>
             {!canSell && st.houses > 0 ? (
-              <p className="mt-1 text-[10px] font-bold uppercase opacity-60">Jual dari grup terbanyak dulu</p>
+              <p className="mt-1 text-[11px] font-semibold text-ink-soft">Jual dari bangunan terbanyak dulu</p>
             ) : null}
           </div>
           <Button
             className="w-full text-xs"
             disabled={!canMortgage}
             onClick={() => act({ type: "MORTGAGE", tile: tileId })}
-            title={!canMortgage ? (st.houses > 0 ? "Jual bangunan dulu" : "Sudah digadaikan") : undefined}
           >
-            Gadai · {rp(Math.floor((tile.price ?? 0) / 2))}
+            Gadai · +{rp(Math.floor((tile.price ?? 0) / 2))}
           </Button>
           <Button
+            variant="mint"
             className="w-full text-xs"
             disabled={!canUnmortgage}
             onClick={() => act({ type: "UNMORTGAGE", tile: tileId })}
@@ -236,8 +252,8 @@ export function PropertySheet({
           </Button>
         </div>
       ) : (
-        <p className="border-[3px] border-dashed border-ink/40 px-2 py-2 text-[11px] font-bold uppercase opacity-60">
-          {st.owner ? "Bukan propertimu." : "Belum ada pemilik. Beli saat mendarat di petak ini."}
+        <p className="rounded-2xl border-[2px] border-dashed border-ink/35 bg-tint px-3 py-2.5 text-xs font-semibold text-ink-soft">
+          {st.owner ? "Properti ini milik pemain lain." : "Belum ada pemilik. Bisa dibeli saat mendarat di petak ini."}
         </p>
       )}
 
@@ -253,14 +269,13 @@ export function MissionCard({ state, seat }: { state: GameState; seat: number })
   if (!p || !features(state).missions) return null;
   const mission = MISSIONS.find((m) => m.id === p.mission);
   return (
-    <div className="border-[3px] border-ink bg-violet/20 p-2">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">Misi rahasia</span>
-        {p.missionDone ? <Chip color="#3DDC97">SELESAI</Chip> : <Chip>BERJALAN</Chip>}
+    <div className="rounded-[22px] border-[3px] border-ink bg-blue-pale p-3.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-[1px] text-blue">Misi rahasia</span>
+        {p.missionDone ? <Chip color="#2FD592">Selesai ✓</Chip> : <Chip color="#FFFFFF">Berjalan</Chip>}
       </div>
-      <div className="mt-1 font-display text-sm uppercase">{mission?.title}</div>
-      <p className="text-[11px] font-bold opacity-70">{mission?.desc}</p>
-      <p className="mt-1 text-[10px] uppercase opacity-50">Jangan tunjukkan ke pemain lain.</p>
+      <div className="mt-1.5 font-display text-base font-extrabold">{mission?.title}</div>
+      <p className="mt-0.5 text-xs font-medium text-ink-soft">{mission?.desc}</p>
     </div>
   );
 }
@@ -279,56 +294,56 @@ export function PlayerInspect({
   const character = CHARACTERS.find((c) => c.id === p.character);
   const groups = ownedGroupCount(state, p.id);
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
+    <div className="space-y-3.5">
+      <div className="flex items-center gap-3 rounded-2xl border-[2.5px] border-ink bg-tint p-3">
         <div
-          className="flex h-14 w-14 items-center justify-center border-[3px] border-ink text-3xl"
+          className="flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-ink text-3xl"
           style={{ background: p.color }}
         >
           {p.token}
         </div>
         <div>
-          <div className="font-display text-lg uppercase leading-none">{p.name}</div>
-          <div className="text-[11px] font-bold uppercase opacity-60">
-            {character?.name} · {p.isBot ? "Bot" : "Manusia"}
+          <div className="font-display text-xl font-extrabold leading-tight">{p.name}</div>
+          <div className="text-xs font-semibold text-ink-soft">
+            {character?.name} · {p.isBot ? "Bot AI" : "Manusia"}
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2.5">
         <Stat label="Cash" value={rp(p.cash)} />
         <Stat label="Net worth" value={rp(netWorth(state, p))} />
         <Stat label="Skor" value={scoreOf(state, p)} />
-        <Stat label="Grup" value={groups} />
+        <Stat label="Grup lengkap" value={groups} />
         <Stat label="Sewa diterima" value={rp(p.stats.rentEarned)} />
         <Stat label="Sewa dibayar" value={rp(p.stats.rentPaid)} />
       </div>
       {character ? (
-        <div className="border-[3px] border-ink bg-muted p-2 text-xs">
-          <p><b>Kelebihan:</b> {character.perk}</p>
-          <p><b>Kelemahan:</b> {character.flaw}</p>
+        <div className="rounded-2xl border-[2.5px] border-ink bg-sun-pale p-3 text-xs">
+          <p className="font-bold text-[#0e8a5a]">+ Kelebihan: {character.perk}</p>
+          <p className="mt-0.5 font-semibold text-tomato">− Kelemahan: {character.flaw}</p>
         </div>
       ) : null}
-      <div className="border-[3px] border-ink p-2">
-        <div className="mb-1 text-[10px] font-bold uppercase tracking-widest opacity-60">Properti</div>
-        {p.properties.length === 0 ? <p className="text-xs opacity-60">Belum punya.</p> : null}
-        <div className="flex flex-wrap gap-1">
+      <div className="rounded-2xl border-[2.5px] border-ink bg-white p-3">
+        <div className="mb-2 text-xs font-bold text-ink-soft">Properti ({p.properties.length})</div>
+        {p.properties.length === 0 ? <p className="text-xs text-ink-soft">Belum memiliki properti.</p> : null}
+        <div className="flex flex-wrap gap-1.5">
           {p.properties.map((id) => {
             const t = TILES[id];
             return (
               <span
                 key={id}
-                className="border-2 border-ink px-1.5 py-0.5 text-[10px] font-bold"
-                style={{ background: t.group ? GROUP_COLORS[t.group] : "#EFE9DA" }}
+                className="rounded-full border-2 border-ink px-2.5 py-0.5 text-xs font-bold"
+                style={{ background: t.group ? GROUP_COLORS[t.group] : "#DFE6FF" }}
               >
                 {t.short}
-                {state.tiles[id].houses > 0 ? ` ${state.tiles[id].houses === 5 ? "🏨" : "🏠".repeat(state.tiles[id].houses)}` : ""}
+                {state.tiles[id].houses > 0 ? ` ${state.tiles[id].houses === 5 ? "★H" : `🏠×${state.tiles[id].houses}`}` : ""}
               </span>
             );
           })}
         </div>
       </div>
       {p.shares.length ? (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1.5">
           {p.shares.map((g) => (
             <Chip key={g} color={GROUP_COLORS[g]}>Saham {GROUP_NAMES[g]}</Chip>
           ))}
@@ -345,14 +360,14 @@ export function RentBreakdown({ state }: { state: GameState }) {
   const r = state.lastRent;
   if (!r) return null;
   return (
-    <div className="border-[3px] border-ink bg-mint/20 p-2 text-[11px]">
-      <div className="flex items-center justify-between font-bold uppercase">
-        <span>Rincian sewa</span>
-        <span className="money text-sm">{rp(r.final)}</span>
+    <div className="rounded-[22px] border-[3px] border-ink bg-mint-pale p-3 text-xs">
+      <div className="flex items-center justify-between font-bold">
+        <span>Rincian sewa terakhir</span>
+        <span className="money text-sm font-extrabold">{rp(r.final)}</span>
       </div>
-      <ul className="mt-1 space-y-0.5 opacity-70">
+      <ul className="mt-1.5 space-y-0.5 text-ink-soft">
         {r.notes.map((n, i) => (
-          <li key={i}>· {n}</li>
+          <li key={i}>• {n}</li>
         ))}
       </ul>
     </div>

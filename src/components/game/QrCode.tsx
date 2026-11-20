@@ -13,7 +13,7 @@ export function QrCode({ value, size = 220 }: { value: string; size?: number }) 
       margin: 1,
       width: size,
       errorCorrectionLevel: "M",
-      color: { dark: "#0A0A0A", light: "#FFFDF5" },
+      color: { dark: "#16142B", light: "#FFFFFF" },
     })
       .then((out) => {
         if (alive) setSvg(out);
@@ -26,8 +26,8 @@ export function QrCode({ value, size = 220 }: { value: string; size?: number }) 
 
   return (
     <div
-      className="border-[4px] border-ink bg-paper p-2 shadow-[6px_6px_0_#0A0A0A]"
-      style={{ width: size + 20, height: size + 20 }}
+      className="overflow-hidden rounded-[20px] border-[3px] border-ink bg-white p-2.5"
+      style={{ width: size + 24, height: size + 24 }}
       // eslint-disable-next-line react/no-danger
       dangerouslySetInnerHTML={{ __html: svg }}
     />
