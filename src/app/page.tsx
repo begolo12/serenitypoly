@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CHARACTERS, PRESET_FEATURES, WAVE_LABEL } from "@/engine/data";
-import type { Mode, Preset, Settings } from "@/engine/types";
+import { CHARACTERS, PAWN_NAMES, PLAYER_COLORS, PRESET_FEATURES, WAVE_LABEL } from "@/engine/data";
+import type { CharacterId, Mode, Preset, Settings } from "@/engine/types";
 import { defaultSettings, type SeatConfig } from "@/engine/create";
+import { PawnAvatar } from "@/components/game/CityArt";
 import { Button, Chip } from "@/components/ui/kit";
 import { cn, rp } from "@/lib/format";
 import { initMute } from "@/lib/sfx";
@@ -83,6 +84,15 @@ export default function Home() {
   const [players, setPlayers] = useState(4);
   const [preset, setPreset] = useState<Preset>("standar");
   const [names, setNames] = useState<string[]>(["", "", "", ""]);
+  const [seatChars, setSeatChars] = useState<Array<CharacterId | "random">>(["random", "random", "random", "random"]);
+  const [seatTokens, setSeatTokens] = useState<number[]>([0, 1, 2, 3]);
+  const [openPawnSeat, setOpenPawnSeat] = useState<number | null>(null);
+  const [showHouseRules, setShowHouseRules] = useState(false);
+  const [startCash, setStartCash] = useState(1500);
+  const [maxRounds, setMaxRounds] = useState(17);
+  const [freeParkingPot, setFreeParkingPot] = useState(false);
+  const [doubleRent, setDoubleRent] = useState(false);
+  const [auction, setAuction] = useState(true);
   const [hasSave, setHasSave] = useState(false);
   const [hostName, setHostName] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -98,8 +108,10 @@ export default function Home() {
     return Array.from({ length: players }, (_, i) => ({
       name: names[i]?.trim() || (mode === "bot" && i > 0 ? `Bot ${i}` : `Pemain ${i + 1}`),
       isBot: mode === "bot" && i > 0,
+      character: seatChars[i] === "random" ? undefined : seatChars[i],
+      tokenIndex: seatTokens[i],
     }));
-  }, [players, names, mode]);
+  }, [players, names, mode, seatChars, seatTokens]);
 
   const start = () => {
     const base = defaultSettings();
@@ -108,8 +120,12 @@ export default function Home() {
       mode,
       preset,
       players,
+      startCash,
+      auction,
+      freeParkingPot,
+      doubleRent,
       turnTimer: preset === "pemula" ? 0 : 45,
-      maxRounds: 17,
+      maxRounds,
     };
     sessionStorage.setItem("sp-setup", JSON.stringify({ settings, seats }));
     sessionStorage.setItem("sp-new", "1");
@@ -132,7 +148,9 @@ export default function Home() {
         body: JSON.stringify({
           tv,
           name: hostName.trim() || names[0]?.trim() || "Pemain 1",
-          settings: { preset, players: 4 },
+          character: seatChars[0] === "random" ? undefined : seatChars[0],
+          tokenIndex: seatTokens[0],
+          settings: { preset, players: 4, startCash, maxRounds, freeParkingPot, doubleRent, auction },
         }),
       });
       const data = await res.json();
@@ -405,25 +423,81 @@ export default function Home() {
               <div className="mt-4 space-y-2.5">
                 {Array.from({ length: players }).map((_, i) => {
                   const isBot = mode === "bot" && i > 0;
+                  const pawnOpen = openPawnSeat === i;
                   return (
-                    <div key={i} className="flex items-center gap-2.5">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-ink bg-tint font-display text-sm font-extrabold">
-                        {i + 1}
-                      </span>
-                      <input
-                        className="field flex-1 text-sm"
-                        placeholder={isBot ? `Bot ${i}` : `Nama pemain ${i + 1}`}
-                        value={names[i] ?? ""}
-                        maxLength={20}
-                        onChange={(e) => {
-                          const next = [...names];
-                          next[i] = e.target.value;
-                          setNames(next);
-                        }}
-                      />
-                      <Chip color={isBot ? "#DFE6FF" : "#D5F7E8"}>
-                        {isBot ? "Bot AI" : "Manusia"}
-                      </Chip>
+                    <div key={i} className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setOpenPawnSeat(pawnOpen ? null : i)}
+                          className={cn(
+                            "relative shrink-0 rounded-full transition-transform hover:scale-105",
+                            pawnOpen && "ring-2 ring-ink ring-offset-2",
+                          )}
+                          title={`Pilih bidak ${PAWN_NAMES[seatTokens[i]]}`}
+                        >
+                          <PawnAvatar index={seatTokens[i]} color={PLAYER_COLORS[i]} size={40} />
+                        </button>
+                        <input
+                          className="field min-w-[120px] flex-1 text-sm"
+                          placeholder={isBot ? `Bot ${i}` : `Nama pemain ${i + 1}`}
+                          value={names[i] ?? ""}
+                          maxLength={20}
+                          onChange={(e) => {
+                            const next = [...names];
+                            next[i] = e.target.value;
+                            setNames(next);
+                          }}
+                        />
+                        <select
+                          aria-label={`Karakter pemain ${i + 1}`}
+                          value={seatChars[i]}
+                          onChange={(e) => {
+                            const next = [...seatChars];
+                            next[i] = e.target.value as CharacterId | "random";
+                            setSeatChars(next);
+                          }}
+                          className="rounded-full border-[2.5px] border-ink bg-white px-2.5 py-1.5 text-xs font-bold text-ink"
+                        >
+                          <option value="random">🎲 Acak</option>
+                          {CHARACTERS.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                        <Chip color={isBot ? "#DFE6FF" : "#D5F7E8"}>
+                          {isBot ? "Bot AI" : "Manusia"}
+                        </Chip>
+                      </div>
+
+                      {pawnOpen ? (
+                        <div className="grid grid-cols-4 gap-1.5 rounded-2xl border-[2.5px] border-ink bg-tint p-2.5 animate-[pop_0.15s_var(--ease-out-soft)] sm:grid-cols-8">
+                          {PAWN_NAMES.map((pName, tokIdx) => {
+                            const activeTok = seatTokens[i] === tokIdx;
+                            return (
+                              <button
+                                key={tokIdx}
+                                type="button"
+                                onClick={() => {
+                                  const next = [...seatTokens];
+                                  next[i] = tokIdx;
+                                  setSeatTokens(next);
+                                  setOpenPawnSeat(null);
+                                }}
+                                title={pName}
+                                className={cn(
+                                  "flex flex-col items-center gap-1 rounded-xl border-[2px] p-1.5 text-center transition",
+                                  activeTok ? "border-ink bg-sun" : "border-transparent bg-white hover:border-ink/40",
+                                )}
+                              >
+                                <PawnAvatar index={tokIdx} color={PLAYER_COLORS[i]} size={32} />
+                                <span className="w-full truncate text-[10px] font-bold text-ink">{pName.split(" ")[0]}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -498,6 +572,90 @@ export default function Home() {
                     </div>
                   </div>
                 ))}
+              </div>
+
+              <div className="mt-4 rounded-2xl border-[2.5px] border-ink bg-white">
+                <button
+                  type="button"
+                  onClick={() => setShowHouseRules((v) => !v)}
+                  className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-xs font-bold text-ink"
+                >
+                  <span>⚙️ Aturan Tambahan (House Rules)</span>
+                  <span className="rounded-full border border-ink bg-tint px-2 py-0.5 text-[11px]">
+                    {showHouseRules ? "Tutup ▲" : "Ubah ▼"}
+                  </span>
+                </button>
+                {showHouseRules ? (
+                  <div className="space-y-3 border-t-2 border-ink/15 p-3.5 text-xs">
+                    <div>
+                      <div className="mb-1.5 font-bold text-ink-soft">Modal awal pemain</div>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[1000, 1500, 2000, 3000].map((v) => (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => setStartCash(v)}
+                            className={cn(
+                              "money rounded-full border-2 border-ink py-1 font-bold",
+                              startCash === v ? "bg-sun text-ink" : "bg-tint text-ink-soft",
+                            )}
+                          >
+                            {rp(v)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-1.5 font-bold text-ink-soft">Batas ronde maksimal</div>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[12, 17, 25, 40].map((r) => (
+                          <button
+                            key={r}
+                            type="button"
+                            onClick={() => setMaxRounds(r)}
+                            className={cn(
+                              "rounded-full border-2 border-ink py-1 font-mono font-bold",
+                              maxRounds === r ? "bg-sun text-ink" : "bg-tint text-ink-soft",
+                            )}
+                          >
+                            {r} Ronde
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 pt-0.5">
+                      <label className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-ink/20 bg-tint px-2.5 py-2">
+                        <span className="font-semibold text-ink">🎁 Jackpot Parkir Gratis (Pot Pajak &amp; Denda)</span>
+                        <input
+                          type="checkbox"
+                          checked={freeParkingPot}
+                          onChange={(e) => setFreeParkingPot(e.target.checked)}
+                          className="h-4 w-4 accent-[#2F5BFF]"
+                        />
+                      </label>
+                      <label className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-ink/20 bg-tint px-2.5 py-2">
+                        <span className="font-semibold text-ink">⭐ Sewa 2× saat Grup Lengkap</span>
+                        <input
+                          type="checkbox"
+                          checked={doubleRent}
+                          onChange={(e) => setDoubleRent(e.target.checked)}
+                          className="h-4 w-4 accent-[#2F5BFF]"
+                        />
+                      </label>
+                      <label className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-ink/20 bg-tint px-2.5 py-2">
+                        <span className="font-semibold text-ink">🔨 Lelang otomatis bila ditolak</span>
+                        <input
+                          type="checkbox"
+                          checked={auction}
+                          onChange={(e) => setAuction(e.target.checked)}
+                          className="h-4 w-4 accent-[#2F5BFF]"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

@@ -8,11 +8,13 @@ import {
   TOKENS,
 } from "./data";
 import { pick, randInt, shuffle } from "./rng";
-import type { GameState, Player, Settings } from "./types";
+import type { CharacterId, GameState, Player, Settings } from "./types";
 
 export interface SeatConfig {
   name: string;
   isBot: boolean;
+  character?: CharacterId;
+  tokenIndex?: number;
 }
 
 export function defaultSettings(): Settings {
@@ -62,19 +64,44 @@ export function createGame(
     settings,
     housesBank: 32,
     hotelsBank: 12,
+    freeParkingPot: 0,
+    lastCard: null,
+    reactions: [],
     engineVersion: ENGINE_VERSION,
   };
 
   const characters = shuffle(state, CHARACTERS.map((c) => c.id));
   const missions = shuffle(state, MISSIONS.map((m) => m.id));
+  const usedTokens = new Set<number>(
+    seats
+      .map((s) => s.tokenIndex)
+      .filter((x): x is number => x !== undefined && Number.isInteger(x) && x >= 0 && x < TOKENS.length),
+  );
 
   state.players = seats.map((seat, i) => {
+    let tokenIndex =
+      seat.tokenIndex !== undefined && Number.isInteger(seat.tokenIndex) && seat.tokenIndex >= 0 && seat.tokenIndex < TOKENS.length
+        ? seat.tokenIndex
+        : -1;
+    if (tokenIndex < 0) {
+      for (let offset = 0; offset < TOKENS.length; offset++) {
+        const candidate = (i + offset) % TOKENS.length;
+        if (!usedTokens.has(candidate)) {
+          tokenIndex = candidate;
+          usedTokens.add(candidate);
+          break;
+        }
+      }
+      if (tokenIndex < 0) tokenIndex = i % TOKENS.length;
+    }
+
     const player: Player = {
       id: `p${i + 1}`,
       name: seat.name || (seat.isBot ? BOT_NAMES[i] : `Pemain ${i + 1}`),
-      character: characters[i % characters.length],
+      character: seat.character ?? characters[i % characters.length],
       color: PLAYER_COLORS[i],
-      token: TOKENS[i],
+      token: TOKENS[tokenIndex],
+      tokenIndex,
       cash: settings.startCash,
       position: 0,
       inJail: false,
@@ -84,6 +111,7 @@ export function createGame(
       bankrupt: false,
       goldenUsed: false,
       goldenActive: false,
+      diplomatVetoUsed: false,
       mission: missions[i % missions.length],
       missionDone: false,
       loans: [],
@@ -104,8 +132,9 @@ export function createGame(
   });
 
   if (state.settings.preset !== "klasik" && state.settings.preset !== "pemula") {
-    const bandar = state.players.find((p) => p.character === "bandar");
-    if (bandar) bandar.cash += 300;
+    for (const p of state.players) {
+      if (p.character === "bandar") p.cash += 300;
+    }
   }
 
   state.shop = pickShop(state);

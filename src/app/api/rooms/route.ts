@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { CHARACTERS, TOKENS } from "@/engine/data";
+import type { CharacterId } from "@/engine/types";
 import { defaultSettings } from "@/engine/create";
 import { dbCreateRoom, getLanIp, makeCode, makeToken, type RoomSeat } from "@/lib/online";
 
@@ -6,7 +8,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  let body: { name?: string; tv?: boolean; settings?: Record<string, unknown> } = {};
+  let body: {
+    name?: string;
+    tv?: boolean;
+    settings?: Record<string, unknown>;
+    character?: CharacterId;
+    tokenIndex?: number;
+  } = {};
   try {
     body = await request.json();
   } catch {
@@ -25,6 +33,15 @@ export async function POST(request: Request) {
   const code = makeCode();
   const hostToken = makeToken();
 
+  const validChar = CHARACTERS.some((c) => c.id === body.character) ? body.character : undefined;
+  const validTok =
+    typeof body.tokenIndex === "number" &&
+    Number.isInteger(body.tokenIndex) &&
+    body.tokenIndex >= 0 &&
+    body.tokenIndex < TOKENS.length
+      ? body.tokenIndex
+      : 0;
+
   const seats: RoomSeat[] = tv
     ? []
     : [
@@ -34,6 +51,8 @@ export async function POST(request: Request) {
           token: makeToken(),
           ready: false,
           isHost: true,
+          character: validChar,
+          tokenIndex: validTok,
         },
       ];
 

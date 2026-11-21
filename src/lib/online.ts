@@ -1,6 +1,6 @@
 import os from "node:os";
 import { neon } from "@neondatabase/serverless";
-import type { GameState } from "@/engine/types";
+import type { CharacterId, GameState } from "@/engine/types";
 
 const url = process.env.DATABASE_URL;
 
@@ -17,6 +17,8 @@ export type RoomSeat = {
   ready: boolean;
   isHost: boolean;
   isBot?: boolean;
+  character?: CharacterId;
+  tokenIndex?: number;
 };
 
 export type RoomRecord = {
@@ -280,4 +282,31 @@ export async function dbUpdateGame(
   const nextVersion = existing.version + 1;
   mem().games.set(upper, { ...existing, state, version: nextVersion });
   return nextVersion;
+}
+
+export async function dbResetGame(code: string, state: GameState): Promise<StoredGame> {
+  const upper = code.toUpperCase();
+  const existing = await dbGetGame(upper);
+  if (!existing) {
+    return dbCreateGame({ id: `g_${upper}_${Math.random().toString(36).slice(2, 10)}`, code: upper, state });
+  }
+  if (hasDb) {
+    try {
+      const rows = (await sql`
+        update sp_games
+        set state = ${JSON.stringify(state)}::jsonb, version = version + 1, updated_at = now()
+        where id = ${existing.id}
+        returning id, code, state, version
+      `) as StoredGame[];
+      if (rows[0]) {
+        mem().games.set(upper, rows[0]);
+        return rows[0];
+      }
+    } catch (err) {
+      console.warn("dbResetGame fallback to memory store:", err);
+    }
+  }
+  const next: StoredGame = { ...existing, state, version: existing.version + 1 };
+  mem().games.set(upper, next);
+  return next;
 }

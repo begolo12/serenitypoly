@@ -396,70 +396,117 @@ export function BuildingBadge({ houses }: { houses: number }) {
   if (houses === 5) {
     return (
       <span
-        className="inline-flex items-center gap-0.5 rounded-full border-[1.5px] border-ink bg-tomato px-1.5 py-[1px] font-display text-[0.68em] font-extrabold leading-none text-white"
+        className="inline-flex items-center gap-0.5 rounded-full border-[1.5px] border-ink bg-tomato px-1.5 py-[1px] font-display text-[0.65em] font-extrabold leading-none text-white"
         title="Hotel"
       >
-        ★ H
+        <svg viewBox="0 0 18 18" className="h-[1.05em] w-[1.05em] shrink-0" aria-hidden="true">
+          <path d="M2 8L9 2L16 8V16H2V8Z" fill="#FFD23F" stroke={INK} strokeWidth="1.8" strokeLinejoin="round" />
+          <rect x="6.5" y="10" width="5" height="6" fill="#FFFFFF" stroke={INK} strokeWidth="1.4" />
+          <path d="M9 4.5L9.9 6.3L11.8 6.6L10.4 7.9L10.7 9.8L9 8.9L7.3 9.8L7.6 7.9L6.2 6.6L8.1 6.3Z" fill="#FF5A3C" />
+        </svg>
+        H
       </span>
     );
   }
   return (
     <span
-      className="inline-flex items-center gap-[2px] rounded-full border-[1.5px] border-ink bg-white px-1 py-[2px] leading-none"
+      className="inline-flex items-center gap-[1.5px] rounded-full border-[1.5px] border-ink bg-white/95 px-1 py-[1.5px] leading-none"
       title={`${houses} rumah`}
     >
       {Array.from({ length: houses }).map((_, i) => (
-        <span key={i} className="inline-block h-[0.55em] w-[0.55em] rounded-[2px] border border-ink bg-mint" />
+        <svg key={i} viewBox="0 0 14 14" className="h-[0.82em] w-[0.82em] shrink-0" aria-hidden="true">
+          <path d="M1.5 7L7 2L12.5 7V12.5H1.5V7Z" fill="#2FD592" stroke={INK} strokeWidth="1.5" strokeLinejoin="round" />
+          <rect x="5" y="8" width="4" height="4.5" fill="#FFFFFF" stroke={INK} strokeWidth="1.1" />
+        </svg>
       ))}
     </span>
   );
 }
 
 function VehicleEmblem({ index }: { index: number }) {
-  const kind = index % 4;
-  if (kind === 0) {
-    // Bajaj Nusantara
-    return (
-      <g>
-        <path d="M19 31C19 23 24 19 31 19H38C42 19 44 22 44 26V33H19V31Z" fill="#FFFFFF" stroke={INK} strokeWidth="2.2" strokeLinejoin="round" />
-        <rect x="26" y="22" width="10" height="6" rx="1.5" fill="#DFE6FF" stroke={INK} strokeWidth="1.8" />
-        <circle cx="24" cy="35" r="3.4" fill="#FFD23F" stroke={INK} strokeWidth="2" />
-        <circle cx="39" cy="35" r="3.4" fill="#FFD23F" stroke={INK} strokeWidth="2" />
-      </g>
-    );
+  const kind = ((index % 8) + 8) % 8;
+  switch (kind) {
+    case 0:
+      // Bajaj Nusantara
+      return (
+        <g>
+          <path d="M19 31C19 23 24 19 31 19H38C42 19 44 22 44 26V33H19V31Z" fill="#FFFFFF" stroke={INK} strokeWidth="2.2" strokeLinejoin="round" />
+          <rect x="26" y="22" width="10" height="6" rx="1.5" fill="#DFE6FF" stroke={INK} strokeWidth="1.8" />
+          <circle cx="24" cy="35" r="3.4" fill="#FFD23F" stroke={INK} strokeWidth="2" />
+          <circle cx="39" cy="35" r="3.4" fill="#FFD23F" stroke={INK} strokeWidth="2" />
+        </g>
+      );
+    case 1:
+      // Skuter Klasik
+      return (
+        <g>
+          <path d="M21 31H29L33 21H39" stroke={INK} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M20 27H28C31 27 32 32 36 32H43" fill="#FFFFFF" stroke={INK} strokeWidth="2.2" strokeLinejoin="round" />
+          <circle cx="39" cy="22" r="2.6" fill="#FFD23F" stroke={INK} strokeWidth="1.8" />
+          <circle cx="23" cy="35" r="3.5" fill="#FFFFFF" stroke={INK} strokeWidth="2" />
+          <circle cx="40" cy="35" r="3.5" fill="#FFFFFF" stroke={INK} strokeWidth="2" />
+        </g>
+      );
+    case 2:
+      // Kapal Phinisi
+      return (
+        <g>
+          <path d="M20 33H44L40 38H24L20 33Z" fill="#16142B" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
+          <path d="M30 33V17L21 30H30Z" fill="#FFFFFF" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
+          <path d="M34 33V15L43 30H34Z" fill="#FFE4DD" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
+        </g>
+      );
+    case 3:
+      // Kereta Ekspres
+      return (
+        <g>
+          <rect x="21" y="17" width="22" height="17" rx="5.5" fill="#FFFFFF" stroke={INK} strokeWidth="2.2" />
+          <rect x="24.5" y="20.5" width="15" height="6.5" rx="2" fill="#DFE6FF" stroke={INK} strokeWidth="1.8" />
+          <circle cx="26.5" cy="30.5" r="1.8" fill="#FFD23F" stroke={INK} strokeWidth="1.3" />
+          <circle cx="37.5" cy="30.5" r="1.8" fill="#FFD23F" stroke={INK} strokeWidth="1.3" />
+          <path d="M23 37H41" stroke={INK} strokeWidth="2.2" strokeLinecap="round" />
+        </g>
+      );
+    case 4:
+      // Sepeda Onthel
+      return (
+        <g>
+          <circle cx="22.5" cy="34" r="5" fill="#FFF4C7" stroke={INK} strokeWidth="2.2" />
+          <circle cx="41.5" cy="34" r="5" fill="#FFF4C7" stroke={INK} strokeWidth="2.2" />
+          <path d="M22.5 34L29 24H37.5L41.5 34M29 24L27 20H24M37.5 24L39.5 19H36" stroke={INK} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="32" cy="33" r="2.2" fill="#FFD23F" stroke={INK} strokeWidth="1.6" />
+        </g>
+      );
+    case 5:
+      // Truk Kargo
+      return (
+        <g>
+          <rect x="18" y="20" width="16" height="14" rx="2.5" fill="#FFFFFF" stroke={INK} strokeWidth="2.1" />
+          <path d="M34 24H42L45 29V34H34V24Z" fill="#FFD23F" stroke={INK} strokeWidth="2.1" strokeLinejoin="round" />
+          <rect x="36" y="26" width="5.5" height="4" rx="1" fill="#DFE6FF" stroke={INK} strokeWidth="1.5" />
+          <circle cx="24" cy="35.5" r="3.2" fill="#FFFFFF" stroke={INK} strokeWidth="2" />
+          <circle cx="39.5" cy="35.5" r="3.2" fill="#FFFFFF" stroke={INK} strokeWidth="2" />
+        </g>
+      );
+    case 6:
+      // Delman Tradisi
+      return (
+        <g>
+          <path d="M20 22C20 19 24 18 32 18H35V30H20V22Z" fill="#FFF4C7" stroke={INK} strokeWidth="2.1" strokeLinejoin="round" />
+          <path d="M35 28H45L43 22L40 24" stroke={INK} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="27" cy="34" r="5" fill="#FFFFFF" stroke={INK} strokeWidth="2.2" />
+          <circle cx="27" cy="34" r="1.6" fill="#FF5A3C" />
+        </g>
+      );
+    default:
+      // Pesawat Garuda
+      return (
+        <g>
+          <path d="M32 15L35 24L45 29V33L35 30L34 36L39 39V41L32 39L25 41V39L30 36L29 30L19 33V29L29 24L32 15Z" fill="#FFFFFF" stroke={INK} strokeWidth="2.1" strokeLinejoin="round" />
+          <circle cx="32" cy="23" r="2" fill="#FFD23F" stroke={INK} strokeWidth="1.4" />
+        </g>
+      );
   }
-  if (kind === 1) {
-    // Skuter Klasik
-    return (
-      <g>
-        <path d="M21 31H29L33 21H39" stroke={INK} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M20 27H28C31 27 32 32 36 32H43" fill="#FFFFFF" stroke={INK} strokeWidth="2.2" strokeLinejoin="round" />
-        <circle cx="39" cy="22" r="2.6" fill="#FFD23F" stroke={INK} strokeWidth="1.8" />
-        <circle cx="23" cy="35" r="3.5" fill="#FFFFFF" stroke={INK} strokeWidth="2" />
-        <circle cx="40" cy="35" r="3.5" fill="#FFFFFF" stroke={INK} strokeWidth="2" />
-      </g>
-    );
-  }
-  if (kind === 2) {
-    // Kapal Phinisi
-    return (
-      <g>
-        <path d="M20 33H44L40 38H24L20 33Z" fill="#16142B" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
-        <path d="M30 33V17L21 30H30Z" fill="#FFFFFF" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
-        <path d="M34 33V15L43 30H34Z" fill="#FFE4DD" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
-      </g>
-    );
-  }
-  // Kereta Ekspres
-  return (
-    <g>
-      <rect x="21" y="17" width="22" height="17" rx="5.5" fill="#FFFFFF" stroke={INK} strokeWidth="2.2" />
-      <rect x="24.5" y="20.5" width="15" height="6.5" rx="2" fill="#DFE6FF" stroke={INK} strokeWidth="1.8" />
-      <circle cx="26.5" cy="30.5" r="1.8" fill="#FFD23F" stroke={INK} strokeWidth="1.3" />
-      <circle cx="37.5" cy="30.5" r="1.8" fill="#FFD23F" stroke={INK} strokeWidth="1.3" />
-      <path d="M23 37H41" stroke={INK} strokeWidth="2.2" strokeLinecap="round" />
-    </g>
-  );
 }
 
 /**

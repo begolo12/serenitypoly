@@ -198,7 +198,7 @@ export function AuctionDialog({
           <div className="mt-1 flex items-center gap-2">
             {bidder ? (
               <PawnAvatar
-                index={Math.max(0, state.players.findIndex((p) => p.id === bidder.id))}
+                index={bidder.tokenIndex ?? Math.max(0, state.players.findIndex((p) => p.id === bidder.id))}
                 color={bidder.color}
                 size={32}
               />
@@ -228,7 +228,7 @@ export function AuctionDialog({
                   a.current === pid ? "bg-sun" : "bg-white",
                 )}
               >
-                <PawnAvatar index={seatIdx} color={bp.color} size={16} className="border p-0" />
+                <PawnAvatar index={bp.tokenIndex ?? seatIdx} color={bp.color} size={16} className="border p-0" />
                 {bp.name} ({rp(bp.cash)})
               </span>
             );
@@ -1278,7 +1278,7 @@ export function ResultDialog({
               return (
                 <div key={p.id} className="flex items-center gap-2.5 px-3 py-2">
                   <span className="w-5 font-display text-sm font-extrabold">{i + 1}</span>
-                  <PawnAvatar index={seatIdx} color={p.color} size={24} className="border-[1.5px] p-0" />
+                  <PawnAvatar index={p.tokenIndex ?? seatIdx} color={p.color} size={24} className="border-[1.5px] p-0" />
                   <span className="flex-1 truncate text-xs font-bold">{p.name}</span>
                   <span className="money text-xs text-ink-soft">{rp(p.cash)}</span>
                   <span className="money w-16 text-right text-xs font-extrabold">{scoreOf(state, p)}</span>

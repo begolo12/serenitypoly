@@ -149,18 +149,31 @@ export function rentFor(
   if (promo) notes.push("Promosi ×3");
   const blackout = s.effects.find((e) => e.kind === "no_rent_group" && e.group === tile.group);
   if (blackout) {
-    effectMult = 0;
-    notes.push("Banjir: sewa 0");
+    return {
+      base,
+      waveMult,
+      effectMult: 0,
+      afterEffects: 0,
+      shareCut: 0,
+      characterAdj: 0,
+      final: 0,
+      dividends: [],
+      notes: [...notes, "Banjir: sewa Rp 0"],
+    };
   }
   value *= effectMult;
 
   let shareCut = 0;
+  const dividends: Array<{ playerId: string; amount: number }> = [];
   if (tile.type === "property" && tile.group) {
     const holders = s.players.filter(
       (p) => !p.bankrupt && p.id !== owner.id && p.shares.includes(tile.group!),
     );
     const per = Math.min(Math.floor((value * 0.1) / 10) * 10, 150);
-    if (per > 0) {
+    if (per > 0 && value > 0) {
+      for (const h of holders) {
+        dividends.push({ playerId: h.id, amount: per });
+      }
       shareCut = per * holders.length;
       if (holders.length) notes.push(`Dividen saham ${holders.length}× Rp ${per}`);
     }
@@ -187,6 +200,7 @@ export function rentFor(
     shareCut,
     characterAdj,
     final,
+    dividends,
     notes,
   };
 }
@@ -222,6 +236,23 @@ export function buyPrice(s: GameState, tileId: number): number {
   return Math.round((base * effectMult(s, "buy_discount")) / 10) * 10;
 }
 
+function downgradeBuilding(s: GameState, p: Player, tileId: number) {
+  const st = s.tiles[tileId];
+  const tile = TILES[tileId];
+  const halfCost = Math.floor((tile.houseCost ?? 0) / 2);
+  if (st.houses === 5) {
+    const targetH = Math.max(0, Math.min(4, s.housesBank));
+    st.houses = targetH;
+    s.hotelsBank += 1;
+    s.housesBank -= targetH;
+    p.cash += (5 - targetH) * halfCost;
+  } else if (st.houses > 0) {
+    st.houses -= 1;
+    s.housesBank += 1;
+    p.cash += halfCost;
+  }
+}
+
 function sellHouses(s: GameState, p: Player, need: number) {
   let guard = 0;
   while (p.cash < need && guard++ < 200) {
@@ -231,16 +262,8 @@ function sellHouses(s: GameState, p: Player, need: number) {
       .sort((a, b) => b.houses - a.houses);
     if (owned.length === 0) break;
     const target = owned[0].id;
-    const st = s.tiles[target];
     const tile = TILES[target];
-    st.houses -= 1;
-    if (st.houses === 4) {
-      s.hotelsBank += 1;
-      s.housesBank -= 4;
-    } else {
-      s.housesBank += 1;
-    }
-    p.cash += Math.floor((tile.houseCost ?? 0) / 2);
+    downgradeBuilding(s, p, target);
     pushLog(s, `${p.name} menjual rumah di ${tile.name} untuk melunasi utang.`, "warn");
   }
 }
@@ -272,6 +295,9 @@ export function pay(
   const paid = Math.min(amount, payer.cash);
   payer.cash -= paid;
   if (creditor && creditor.id !== payer.id) creditor.cash += paid;
+  else if (!creditor && s.settings.freeParkingPot && paid > 0 && reason !== "jatuh tempo pinjaman") {
+    s.freeParkingPot = (s.freeParkingPot ?? 0) + paid;
+  }
   if (paid < amount) {
     pushLog(s, `${payer.name} tidak mampu membayar ${reason}. Bangkrut!`, "warn");
     bankrupt(s, payer, creditor);
@@ -362,6 +388,12 @@ function moveTo(s: GameState, p: Player, target: number, collectGo = true) {
 
 function applyCard(s: GameState, p: Player, card: CardDef) {
   pushLog(s, `${p.name} menarik kartu: ${card.text}`);
+  s.lastCard = {
+    deck: card.deck,
+    title: card.deck === "chance" ? "Kesempatan" : "Dana Umum",
+    text: card.text,
+    playerId: p.id,
+  };
   const others = living(s).filter((x) => x.id !== p.id);
   switch (card.kind) {
     case "money":
@@ -436,11 +468,38 @@ function resolveTile(s: GameState, p: Player) {
       const owner = playerOf(s, st.owner);
       if (!owner || owner.bankrupt) return;
       const breakdown = rentFor(s, tile.id, (s.dice?.[0] ?? 1) + (s.dice?.[1] ?? 1), owner, p);
+      if (features(s).characters && p.character === "diplomat" && !p.diplomatVetoUsed && breakdown.final >= 100) {
+        p.diplomatVetoUsed = true;
+        s.lastRent = {
+          ...breakdown,
+          final: 0,
+          dividends: [],
+          notes: [...breakdown.notes, "Imunitas Diplomat: Rp 0"],
+        };
+        pushLog(s, `${p.name} memakai Imunitas Diplomat — bebas sewa Rp ${breakdown.final} di ${tile.name}!`, "good");
+        break;
+      }
       s.lastRent = breakdown;
+      if (breakdown.final <= 0 && (!breakdown.dividends || breakdown.dividends.length === 0)) {
+        pushLog(s, `${p.name} bebas sewa di ${tile.name} (${breakdown.notes[breakdown.notes.length - 1] ?? "Rp 0"}).`);
+        break;
+      }
       const paid = pay(s, p, breakdown.final, owner, `sewa ${tile.name}`);
       p.stats.rentPaid += paid;
       owner.stats.rentEarned += paid;
       pushLog(s, `${p.name} bayar sewa Rp ${paid} ke ${owner.name} (${tile.name}).`, "money");
+      if (!p.bankrupt && breakdown.dividends?.length) {
+        for (const div of breakdown.dividends) {
+          if (div.playerId === p.id || div.amount <= 0) continue;
+          const holder = playerOf(s, div.playerId);
+          if (!holder || holder.bankrupt) continue;
+          const divPaid = pay(s, p, div.amount, holder, `dividen saham ${tile.name}`);
+          if (divPaid > 0) {
+            p.stats.rentPaid += divPaid;
+            pushLog(s, `${holder.name} terima dividen saham Rp ${divPaid} dari ${tile.name}.`, "good");
+          }
+        }
+      }
       break;
     }
     case "tax": {
@@ -460,9 +519,17 @@ function resolveTile(s: GameState, p: Player) {
     case "gotojail":
       sendToJail(s, p);
       break;
-    case "free":
-      pushLog(s, `${p.name} berhenti di Parkir Gratis.`);
+    case "free": {
+      if (s.settings.freeParkingPot && (s.freeParkingPot ?? 0) > 0) {
+        const pot = s.freeParkingPot ?? 0;
+        s.freeParkingPot = 0;
+        receive(s, p, pot);
+        pushLog(s, `${p.name} mengambil Jackpot Parkir Gratis Rp ${pot}!`, "good");
+      } else {
+        pushLog(s, `${p.name} berhenti di Parkir Gratis.`);
+      }
       break;
+    }
     case "jail":
       pushLog(s, `${p.name} hanya mengunjungi penjara.`);
       break;
@@ -725,6 +792,7 @@ function endTurn(s: GameState) {
   s.doubles = 0;
   s.pendingRoll = false;
   s.lastRent = null;
+  s.lastCard = null;
 
   const n = s.players.length;
   let idx = s.turnIndex;
@@ -759,6 +827,7 @@ export function applyAction(prev: GameState, action: Action): GameState {
     case "ROLL": {
       if (s.phase !== "await_roll" && s.phase !== "jail") break;
       if (s.offer || s.auction) break;
+      s.lastCard = null;
       const d1 = randInt(s, 1, 6);
       const d2 = randInt(s, 1, 6);
       s.dice = [d1, d2];
@@ -903,15 +972,7 @@ export function applyAction(prev: GameState, action: Action): GameState {
       const others = GROUP_TILES[tile.group!].filter((id) => id !== tile.id).map((id) => s.tiles[id].houses);
       const max = Math.max(...others);
       if (st.houses < max) break;
-      if (st.houses === 5) {
-        st.houses = 4;
-        s.hotelsBank += 1;
-        s.housesBank -= 4;
-      } else {
-        st.houses -= 1;
-        s.housesBank += 1;
-      }
-      p.cash += Math.floor((tile.houseCost ?? 0) / 2);
+      downgradeBuilding(s, p, tile.id);
       pushLog(s, `${p.name} menjual bangunan di ${tile.name}.`, "money");
       break;
     }

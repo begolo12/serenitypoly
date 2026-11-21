@@ -114,6 +114,65 @@
   }
 }
 
+@keyframes card-flip-in {
+  0% {
+    opacity: 0;
+    transform: perspective(700px) rotateY(-65deg) scale(0.86) translateY(-10px);
+  }
+  60% {
+    opacity: 1;
+    transform: perspective(700px) rotateY(8deg) scale(1.03) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(700px) rotateY(0deg) scale(1);
+  }
+}
+
+@keyframes confetti-fall {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, -10px, 0) rotate(0deg) scale(1);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--tx, 24px), 210px, 0) rotate(var(--rot, 320deg)) scale(0.7);
+  }
+}
+
+@keyframes reaction-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.75);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.08);
+  }
+  80% {
+    opacity: 1;
+    transform: translateY(-68px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-102px) scale(0.92);
+  }
+}
+
+@keyframes banner-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-18px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @keyframes float-delta {
   0% {
     opacity: 0;

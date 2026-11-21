@@ -96,7 +96,7 @@ export function PlayerRail({ state, onInspect }: { state: GameState; onInspect: 
               ) : null}
 
               <div className="flex items-center gap-2">
-                <PawnAvatar index={idx} color={p.color} size={38} />
+                <PawnAvatar index={p.tokenIndex ?? idx} color={p.color} size={38} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-display text-sm font-extrabold leading-tight text-ink">{p.name}</div>
                   <div className="text-[11px] font-semibold text-ink-soft">
@@ -432,7 +432,7 @@ export function PlayerInspect({
   return (
     <div className="space-y-3.5">
       <div className="flex items-center gap-3 rounded-2xl border-[2.5px] border-ink bg-tint p-3">
-        <PawnAvatar index={idx} color={p.color} size={56} />
+        <PawnAvatar index={p.tokenIndex ?? idx} color={p.color} size={56} />
         <div>
           <div className="font-display text-xl font-extrabold leading-tight">{p.name}</div>
           <div className="text-xs font-semibold text-ink-soft">
@@ -490,12 +490,18 @@ export function PlayerInspect({
 export function RentBreakdown({ state }: { state: GameState }) {
   const r = state.lastRent;
   if (!r) return null;
+  const totalDiv = r.dividends?.reduce((sum, d) => sum + d.amount, 0) ?? 0;
   return (
     <div className="rounded-[22px] border-[3px] border-ink bg-mint-pale p-3 text-xs">
       <div className="flex items-center justify-between font-bold">
         <span>Rincian sewa terakhir</span>
         <span className="money text-sm font-extrabold">{rp(r.final)}</span>
       </div>
+      {totalDiv > 0 ? (
+        <div className="mt-1 rounded-xl border border-ink/25 bg-white/80 px-2 py-1 text-[11px] font-bold text-ink">
+          📈 Dividen pemegang saham dibayar: {rp(totalDiv)}
+        </div>
+      ) : null}
       <ul className="mt-1.5 space-y-0.5 text-ink-soft">
         {r.notes.map((n, i) => (
           <li key={i}>• {n}</li>

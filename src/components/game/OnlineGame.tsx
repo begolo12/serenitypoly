@@ -3,10 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Action, GameState } from "@/engine/types";
-import { current, features, groupComplete, living, netWorth, playerOf } from "@/engine/actions";
-import { CHARACTERS, GROUP_COLORS, PLAYER_COLORS, TILES, TOKENS, WAVE_LABEL } from "@/engine/data";
+import { current, features, groupComplete, living, netWorth, ownedGroupCount, playerOf } from "@/engine/actions";
+import { CHARACTERS, GROUP_COLORS, PLAYER_COLORS, TILES, WAVE_LABEL } from "@/engine/data";
 import { Board } from "@/components/game/Board";
 import { PawnAvatar, TileArtwork } from "@/components/game/CityArt";
+import {
+  AudioMixerButton,
+  CardRevealOverlay,
+  ConfettiBurst,
+  EventBreakingBanner,
+  ReactionOverlay,
+} from "@/components/game/GameFx";
 import { PlayerRail, PropertySheet, RentBreakdown, useCashDeltas } from "@/components/game/Panels";
 import {
   AuctionDialog,
@@ -24,17 +31,47 @@ import { QrCode } from "@/components/game/QrCode";
 import { Button, Chip, Modal, Tooltip } from "@/components/ui/kit";
 import { cn, rp } from "@/lib/format";
 import type { PublicRoom } from "@/lib/online";
-import { initMute, isBgmPlaying, isMuted, setMuted, sfx, stopBgm, toggleBgm } from "@/lib/sfx";
+import { initMute, sfx, stopBgm } from "@/lib/sfx";
 
 type Identity = { playerId: string; token: string };
 
-function playDeltaSfx(prev: GameState | null, next: GameState) {
+const REACTION_EMOJIS = ["❤️", "🔥", "👏", "😱", "🤣", "💸"] as const;
+
+function handleTransitionFx(
+  prev: GameState | null,
+  next: GameState,
+  onConfetti: (key: string) => void,
+) {
   if (!prev) {
     sfx.turn();
     return;
   }
+  const hitJackpot =
+    Boolean(prev.settings.freeParkingPot) &&
+    (prev.freeParkingPot ?? 0) > 0 &&
+    (next.freeParkingPot ?? 0) === 0;
+  const newMono = next.players.some(
+    (pl) => !pl.bankrupt && ownedGroupCount(next, pl.id) > ownedGroupCount(prev, pl.id),
+  );
+  const isCounter = Boolean(prev.trade && next.trade && next.trade.from === prev.trade.to);
+
   if (next.phase === "game_over" && prev.phase !== "game_over") {
     sfx.win();
+    onConfetti(`win-${next.version}`);
+    return;
+  }
+  if (hitJackpot) {
+    sfx.jackpot();
+    onConfetti(`pot-${next.version}`);
+    return;
+  }
+  if (newMono) {
+    sfx.monopoly();
+    onConfetti(`mono-${next.version}`);
+    return;
+  }
+  if (isCounter) {
+    sfx.counterOffer();
     return;
   }
   if (next.round > prev.round && next.event && next.event.id !== prev.event?.id) {
@@ -91,8 +128,9 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
   const [inspectId, setInspectId] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const [origin, setOrigin] = useState("");
-  const [muted, setMutedState] = useState(false);
-  const [bgm, setBgm] = useState(false);
+  const [confettiKey, setConfettiKey] = useState<string | null>(null);
+  const [connRetry, setConnRetry] = useState(false);
+  const [reactCoolUntil, setReactCoolUntil] = useState(0);
   const [showBoardOnMobile, setShowBoardOnMobile] = useState(false);
   const [showPropsTab, setShowPropsTab] = useState(false);
   const [qrModalOpen, setQrModalOpen] = useState(false);
@@ -104,11 +142,22 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
   const prevSeatsRef = useRef<number | null>(null);
   const botBusyRef = useRef(false);
   const prevMyTurnRef = useRef(false);
+  const pollFastRef = useRef(false);
+  const failCountRef = useRef(0);
+
+  useEffect(() => {
+    const fast = Boolean(
+      state &&
+        state.phase !== "game_over" &&
+        (state.auction ||
+          state.trade ||
+          (identity?.playerId && current(state)?.id === identity.playerId)),
+    );
+    pollFastRef.current = fast;
+  }, [state, identity?.playerId]);
 
   useEffect(() => {
     initMute();
-    setMutedState(isMuted());
-    setBgm(isBgmPlaying());
     setOrigin(window.location.origin);
     if (!tv) {
       const raw = localStorage.getItem(`sp-seat-${code}`);
@@ -131,16 +180,21 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
       try {
         const res = await fetch(`/api/games/${code}?since=${versionRef.current}`, { cache: "no-store" });
         if (res.ok) {
+          failCountRef.current = 0;
+          if (alive) setConnRetry(false);
           const data = await res.json();
           if (alive && data.state) {
             const nextState = data.state as GameState;
             if (data.version !== versionRef.current) {
-              playDeltaSfx(stateRef.current, nextState);
+              handleTransitionFx(stateRef.current, nextState, setConfettiKey);
               versionRef.current = data.version;
               stateRef.current = nextState;
               setState(nextState);
             }
           }
+        } else if (res.status >= 500) {
+          failCountRef.current += 1;
+          if (alive && failCountRef.current >= 2) setConnRetry(true);
         }
         if (!stateRef.current) {
           const rr = await fetch(`/api/rooms/${code}`, { cache: "no-store" });
@@ -158,9 +212,20 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
           }
         }
       } catch {
-        /* offline; retry next tick */
+        failCountRef.current += 1;
+        if (alive && failCountRef.current >= 2) setConnRetry(true);
       }
-      if (alive) timer = window.setTimeout(tick, 1100);
+      if (alive) {
+        const waitMs =
+          typeof document !== "undefined" && document.hidden
+            ? 3000
+            : failCountRef.current > 0
+              ? Math.min(4000, 1100 * (failCountRef.current + 1))
+              : pollFastRef.current
+                ? 750
+                : 1350;
+        timer = window.setTimeout(tick, waitMs);
+      }
     };
 
     void tick();
@@ -196,7 +261,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
         });
         const data = await res.json().catch(() => ({}));
         if (data.state && data.version && data.version !== versionRef.current) {
-          playDeltaSfx(stateRef.current, data.state as GameState);
+          handleTransitionFx(stateRef.current, data.state as GameState, setConfettiKey);
           versionRef.current = data.version;
           stateRef.current = data.state as GameState;
           setState(data.state as GameState);
@@ -238,7 +303,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
         });
         const data = await res.json();
         if (data.state) {
-          playDeltaSfx(stateRef.current, data.state as GameState);
+          handleTransitionFx(stateRef.current, data.state as GameState, setConfettiKey);
           versionRef.current = data.version;
           stateRef.current = data.state as GameState;
           setState(data.state as GameState);
@@ -252,17 +317,56 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
     [code, identity],
   );
 
-  const toggleMute = () => {
-    const next = !muted;
-    setMuted(next);
-    setMutedState(next);
-    if (next) setBgm(false);
+  const sendReaction = async (emoji: string) => {
+    if (!identity || Date.now() < reactCoolUntil) return;
+    setReactCoolUntil(Date.now() + 1500);
+    window.setTimeout(() => setReactCoolUntil(0), 1520);
+    sfx.click();
+    try {
+      const res = await fetch(`/api/games/${code}/react`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...identity, emoji }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && stateRef.current && data.reactions) {
+        const updated = { ...stateRef.current, reactions: data.reactions };
+        versionRef.current = data.version ?? versionRef.current;
+        stateRef.current = updated;
+        setState(updated);
+      }
+    } catch {
+      /* ignore */
+    }
   };
 
-  const handleBgm = () => {
-    const active = toggleBgm();
-    setBgm(active);
-    if (active) setMutedState(false);
+  const rematch = async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      const hostToken = localStorage.getItem(`sp-host-${code}`) ?? undefined;
+      const res = await fetch(`/api/rooms/${code}/rematch`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...(identity ?? {}),
+          hostToken,
+          fromTv: tv,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Gagal memulai ulang");
+      if (data.state) {
+        versionRef.current = data.version;
+        stateRef.current = data.state as GameState;
+        setState(data.state as GameState);
+        sfx.turn();
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Hanya host / TV yang dapat memulai ulang");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const toggleFullscreen = () => {
@@ -339,9 +443,19 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
     const tvTradeTo = state.trade ? playerOf(state, state.trade.to) : null;
     const tvOfferTile = state.offer ? TILES[state.offer.tile] : null;
     const meChar = CHARACTERS.find((c) => c.id === me?.character);
+    const cardPlayer = state.lastCard ? playerOf(state, state.lastCard.playerId) : null;
 
     return (
       <main className="mx-auto flex min-h-dvh w-full max-w-[1600px] flex-col gap-3 px-3 py-2.5 md:px-5">
+        <ConfettiBurst triggerKey={confettiKey} />
+        <CardRevealOverlay
+          card={state.lastCard}
+          playerName={cardPlayer?.name}
+          playerColor={cardPlayer?.color}
+          round={state.round}
+        />
+        <EventBreakingBanner event={state.event} round={state.round} />
+        <ReactionOverlay reactions={state.reactions} />
         <header className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-xl border-2 border-ink bg-sun text-sm">
@@ -355,19 +469,17 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
             Ronde {state.round}/{state.settings.maxRounds} · {waveText}
           </Chip>
           <Chip color="#DFE6FF">Kode {code}</Chip>
-          <Chip color={me?.color}>{me?.token} {me?.name} · Giliran</Chip>
+          <Chip color={connRetry ? "#FFE4DD" : "#D5F7E8"}>
+            {connRetry ? "🟡 Menyambung…" : "🟢 Live"}
+          </Chip>
+          <Chip color={me?.color}>{me?.name} · Giliran</Chip>
           {state.event ? <Chip color="#FFE4DD">⚡ {state.event.label}</Chip> : null}
 
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
             <Button className="min-h-0 px-3 py-1.5 text-xs" onClick={() => setQrModalOpen(true)}>
               📱 QR &amp; Kode
             </Button>
-            <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={handleBgm} title="Musik latar">
-              {bgm ? "🎵" : "🎶"}
-            </Button>
-            <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={toggleMute} title="Suara">
-              {muted ? "🔇" : "🔊"}
-            </Button>
+            <AudioMixerButton />
             <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={toggleFullscreen} title="Layar Penuh">
               ⛶
             </Button>
@@ -408,7 +520,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
               ) : null}
               <div className="text-xs font-bold text-ink-soft">Sekarang bermain</div>
               <div className="mt-2 flex items-center gap-3">
-                <PawnAvatar index={state.turnIndex} color={me?.color ?? "#FFD23F"} size={48} />
+                <PawnAvatar index={me?.tokenIndex ?? state.turnIndex} color={me?.color ?? "#FFD23F"} size={48} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-display text-xl font-extrabold leading-tight">{me?.name}</div>
                   <Tooltip tip={meChar ? `+ ${meChar.perk} · − ${meChar.flaw}` : undefined} position="bottom">
@@ -514,7 +626,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
           </div>
         </Modal>
         {state.phase === "game_over" ? (
-          <ResultDialog state={state} onRestart={() => router.push("/")} onExit={() => router.push("/")} />
+          <ResultDialog state={state} onRestart={() => void rematch()} onExit={() => router.push("/")} />
         ) : null}
       </main>
     );
@@ -526,9 +638,19 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
   const needsMyTradeResp = Boolean(myId && state.trade?.to === myId);
   const isMyAction = isMyTurn || needsMyBid || needsMyTradeResp;
   const canRollOnBoard = Boolean(canAct && (state.phase === "await_roll" || state.phase === "jail") && !state.offer);
+  const cardPlayer = state.lastCard ? playerOf(state, state.lastCard.playerId) : null;
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[1600px] flex-col gap-2.5 px-3 py-2.5 md:px-5">
+      <ConfettiBurst triggerKey={confettiKey} />
+      <CardRevealOverlay
+        card={state.lastCard}
+        playerName={cardPlayer?.name}
+        playerColor={cardPlayer?.color}
+        round={state.round}
+      />
+      <EventBreakingBanner event={state.event} round={state.round} />
+      <ReactionOverlay reactions={state.reactions} />
       <header className="flex flex-wrap items-center gap-1.5">
         <div className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg border-2 border-ink bg-sun text-xs">
@@ -542,6 +664,9 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
           R{state.round} · {waveText}
         </Chip>
         <Chip color="#DFE6FF">Room {code}</Chip>
+        <Chip color={connRetry ? "#FFE4DD" : "#D5F7E8"}>
+          {connRetry ? "🟡 Retry" : "🟢 Live"}
+        </Chip>
         {state.event ? <Chip color="#FFE4DD">⚡ {state.event.label}</Chip> : null}
         <div className="ml-auto flex flex-wrap items-center gap-1">
           {myPlayer ? (
@@ -553,12 +678,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
               {showBoardOnMobile ? "🎮 Kontroler" : "🗺️ Papan"}
             </Button>
           ) : null}
-          <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={handleBgm} title="Musik latar">
-            {bgm ? "🎵" : "🎶"}
-          </Button>
-          <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={toggleMute} title="Suara">
-            {muted ? "🔇" : "🔊"}
-          </Button>
+          <AudioMixerButton />
           <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={() => setPanel("rules")}>
             📖
           </Button>
@@ -593,7 +713,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
                       onClick={() => void reclaimSeat(p.id)}
                       className="flex w-full items-center gap-3 rounded-2xl border-[2.5px] border-ink bg-white p-3 text-left transition-colors hover:bg-sun-pale"
                     >
-                      <PawnAvatar index={seatIdx} color={p.color} size={42} />
+                      <PawnAvatar index={p.tokenIndex ?? seatIdx} color={p.color} size={42} />
                       <div className="flex-1">
                         <div className="font-display text-sm font-extrabold">{p.name}</div>
                         <div className="money text-xs text-ink-soft">{rp(p.cash)}</div>
@@ -671,7 +791,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
             ) : null}
             <div className="flex items-center gap-3">
               <PawnAvatar
-                index={Math.max(0, state.players.findIndex((x) => x.id === myPlayer.id))}
+                index={myPlayer.tokenIndex ?? Math.max(0, state.players.findIndex((x) => x.id === myPlayer.id))}
                 color={myPlayer.color}
                 size={48}
               />
@@ -753,6 +873,26 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
               </div>
             </div>
           )}
+
+          <div className="flex items-center justify-between gap-2 rounded-2xl border-[2.5px] border-ink bg-white px-3 py-2">
+            <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-ink-soft">Reaksi TV</span>
+            <div className="flex items-center gap-1.5">
+              {REACTION_EMOJIS.map((em) => (
+                <button
+                  key={em}
+                  type="button"
+                  disabled={reactCoolUntil > 0}
+                  onClick={() => void sendReaction(em)}
+                  className={cn(
+                    "flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink bg-tint text-base transition active:scale-90",
+                    reactCoolUntil > 0 ? "opacity-45" : "hover:bg-sun-pale",
+                  )}
+                >
+                  {em}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="grid grid-cols-2 gap-2">
             <Button
@@ -916,7 +1056,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
         ) : null}
       </Modal>
       {state.phase === "game_over" ? (
-        <ResultDialog state={state} onRestart={() => router.push("/")} onExit={() => router.push("/")} />
+        <ResultDialog state={state} onRestart={() => void rematch()} onExit={() => router.push("/")} />
       ) : null}
     </div>
   );
@@ -1119,15 +1259,26 @@ function WaitRoom({
                       s ? "bg-white" : "border-dashed bg-tint/60",
                     )}
                   >
-                    <span
-                      className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink text-base font-bold"
-                      style={{ background: s ? PLAYER_COLORS[i] : "#EDEDF3" }}
-                    >
-                      {s ? TOKENS[i] : i + 1}
-                    </span>
-                    <span className="flex-1 truncate text-sm font-bold">
-                      {s ? s.name : "Scan QR atau ketik kode di HP…"}
-                    </span>
+                    {s ? (
+                      <PawnAvatar index={s.tokenIndex ?? i} color={PLAYER_COLORS[i]} size={34} />
+                    ) : (
+                      <span
+                        className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink text-base font-bold"
+                        style={{ background: "#EDEDF3" }}
+                      >
+                        {i + 1}
+                      </span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-bold">
+                        {s ? s.name : "Scan QR atau ketik kode di HP…"}
+                      </div>
+                      {s?.character ? (
+                        <div className="text-[11px] font-semibold text-ink-soft">
+                          {CHARACTERS.find((c) => c.id === s.character)?.name}
+                        </div>
+                      ) : null}
+                    </div>
                     {s?.isHost ? <Chip color="#FFD23F">Host</Chip> : null}
                     {s?.isBot ? <Chip color="#DFE6FF">Bot</Chip> : null}
                     {s ? <Chip color={s.ready ? "#2FD592" : "#EDEDF3"}>{s.ready ? "Siap ✓" : "Belum"}</Chip> : null}

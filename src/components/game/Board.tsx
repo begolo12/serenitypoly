@@ -26,6 +26,13 @@ export function cellOf(i: number): { col: number; row: number } {
   return { col: 11, row: 1 + (i - 30) };
 }
 
+function trackCenterPct(track: number): number {
+  const total = 1.28 + 9 + 1.28;
+  if (track <= 1) return (0.64 / total) * 100;
+  if (track >= 11) return ((1.28 + 9 + 0.64) / total) * 100;
+  return ((1.28 + (track - 2) + 0.5) / total) * 100;
+}
+
 function useAnimatedPositions(state: GameState) {
   const posRef = useRef<Record<string, number>>({});
   const [hoppingId, setHoppingId] = useState<string | null>(null);
@@ -173,7 +180,7 @@ function specialTileSummary(tile: Tile): string {
     case "jail":
       return "Sekadar berkunjung aman, atau menunggu bebas saat berstatus tahanan.";
     case "free":
-      return "Area istirahat Nusantara yang aman tanpa denda sewa.";
+      return "Area istirahat aman — jika Jackpot Parkir Gratis aktif, ambil seluruh kumpulan pajak & denda!";
     case "gotojail":
       return "Langsung dipindahkan ke Penjara tanpa melewati gaji GO.";
     default:
@@ -279,7 +286,7 @@ export function Board({
       className="relative mx-auto aspect-square w-full max-w-[min(100%,calc(100dvh-5.75rem))] rounded-[28px] border-[3px] border-ink bg-ink p-[3px]"
       style={{ containerType: "inline-size", fontSize: "clamp(6.5px, 1.02cqw, 11.5px)" }}
     >
-      <div className="grid h-full w-full grid-cols-11 grid-rows-11 gap-[2px] overflow-hidden rounded-[23px] bg-ink">
+      <div className="grid h-full w-full grid-cols-[1.28fr_repeat(9,minmax(0,1fr))_1.28fr] grid-rows-[1.28fr_repeat(9,minmax(0,1fr))_1.28fr] gap-[2px] overflow-hidden rounded-[23px] bg-ink">
         {TILES.map((tile) => {
           const { col, row } = cellOf(tile.id);
           const st = state.tiles[tile.id];
@@ -315,8 +322,10 @@ export function Board({
                 gridRow: row,
                 background:
                   owner && tile.group
-                    ? `${GROUP_COLORS[tile.group]}24`
-                    : tileSurface(tile),
+                    ? `${GROUP_COLORS[tile.group]}26`
+                    : owner
+                      ? `${owner.color}16`
+                      : tileSurface(tile),
               }}
               aria-label={`${tile.name}${owner ? `, milik ${owner.name}` : ""}`}
             >
@@ -337,6 +346,32 @@ export function Board({
                     </span>
                   ) : null}
                 </div>
+              ) : isCorner ? (
+                <div className="flex w-full shrink-0 items-center justify-between px-[4px] pt-[3px]">
+                  <span
+                    className={cn(
+                      "rounded-full border border-ink px-1.5 py-[0.5px] font-display font-extrabold leading-tight",
+                      tile.id === 0
+                        ? "bg-tomato text-white"
+                        : tile.id === 20 && state.settings.freeParkingPot && (state.freeParkingPot ?? 0) > 0
+                          ? "bg-sun text-ink"
+                          : tile.id === 30
+                            ? "bg-ink text-sun"
+                            : "bg-white text-ink",
+                    )}
+                    style={{ fontSize: "0.56em" }}
+                  >
+                    {tile.id === 0
+                      ? "START"
+                      : tile.id === 10
+                        ? "TAHANAN"
+                        : tile.id === 20
+                          ? state.settings.freeParkingPot && (state.freeParkingPot ?? 0) > 0
+                            ? `POT ${state.freeParkingPot}`
+                            : "PARKIR"
+                          : "MASUK"}
+                  </span>
+                </div>
               ) : null}
 
               <div className="flex flex-1 flex-col items-center justify-between px-[2px] py-[2px] text-center leading-none">
@@ -345,7 +380,7 @@ export function Board({
                     tileId={tile.id}
                     className={cn(
                       "transition-transform duration-200 group-hover:scale-110",
-                      tile.group ? "h-[2.3em] w-[2.3em]" : "h-[2.75em] w-[2.75em]",
+                      isCorner ? "h-[3.15em] w-[3.15em]" : tile.group ? "h-[2.3em] w-[2.3em]" : "h-[2.65em] w-[2.65em]",
                     )}
                   />
                 </div>
@@ -499,7 +534,7 @@ export function Board({
                     fontSize: "0.7em",
                   }}
                 >
-                  <PawnAvatar index={currentIdx} color={current.color} size={16} className="border-[1.5px] p-0" />
+                  <PawnAvatar index={current.tokenIndex ?? currentIdx} color={current.color} size={16} className="border-[1.5px] p-0" />
                   {current.name}
                 </span>
               ) : null}
@@ -921,14 +956,14 @@ export function Board({
               key={p.id}
               className="absolute transition-all duration-150 ease-out"
               style={{
-                left: `calc(${((col - 0.5) / 11) * 100}% + ${offsetX}em)`,
-                top: `calc(${((row - 0.5) / 11) * 100}% + 0.35em)`,
+                left: `calc(${trackCenterPct(col)}% + ${offsetX}em)`,
+                top: `calc(${trackCenterPct(row)}% + 0.35em)`,
                 transform: "translate(-50%, -50%)",
                 zIndex: isTurn ? 35 : 20 + idx,
               }}
             >
               <BoardPawn
-                index={idx}
+                index={p.tokenIndex ?? idx}
                 color={p.color}
                 name={p.name}
                 active={isTurn}

@@ -39,7 +39,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   };
   const state = createGame(
     settings,
-    seats.map((s) => ({ name: s.name, isBot: Boolean(s.isBot) })),
+    seats.map((s) => ({
+      name: s.name,
+      isBot: Boolean(s.isBot),
+      character: s.character,
+      tokenIndex: s.tokenIndex,
+    })),
   );
   const gameId = `g_${room.code}_${makeToken().slice(0, 8)}`;
 

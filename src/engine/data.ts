@@ -37,6 +37,17 @@ export const PLAYER_COLORS = ["#FF5A3C", "#2F5BFF", "#FFD23F", "#2FD592"];
 
 export const TOKENS = ["🛺", "🛵", "⛵", "🚆", "🚲", "🚚", "🐴", "🚌"];
 
+export const PAWN_NAMES = [
+  "Bajaj Nusantara",
+  "Skuter Klasik",
+  "Kapal Phinisi",
+  "Kereta Ekspres",
+  "Sepeda Onthel",
+  "Truk Kargo",
+  "Delman Tradisi",
+  "Pesawat Garuda",
+];
+
 const R = {
   r60: [2, 10, 30, 90, 160, 250],
   r100: [6, 30, 90, 270, 400, 550],
@@ -239,7 +250,7 @@ export const SHOP_CARDS: ShopCardDef[] = [
 export const CHARACTERS: CharacterDef[] = [
   { id: "saudagar", name: "Saudagar", perk: "Menang lelang diskon 15%", flaw: "Sewa diterima −10%" },
   { id: "arsitek", name: "Arsitek", perk: "Biaya bangun −25%", flaw: "Bunga pinjaman 15%" },
-  { id: "diplomat", name: "Diplomat", perk: "1× veto tawaran dagang", flaw: "Gaji GO −50" },
+  { id: "diplomat", name: "Diplomat", perk: "1× Bebas sewa ≥Rp100 & veto", flaw: "Gaji GO −50" },
   { id: "bandar", name: "Bandar", perk: "Mulai +Rp 300, rebate lelang 10%", flaw: "Denda penjara Rp 100" },
   { id: "penjelajah", name: "Penjelajah", perk: "Gaji GO +50%", flaw: "PBB dibayar ×1,5" },
 ];

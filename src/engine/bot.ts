@@ -1,6 +1,14 @@
 import { GROUP_TILES, TILES } from "./data";
-import { buildCost, buyPrice, current, groupComplete, hasEffect, living, playerOf } from "./actions";
+import { buildCost, buyPrice, current, features, groupComplete, hasEffect, living, playerOf } from "./actions";
 import type { Action, GameState, Player } from "./types";
+
+function completesGroupFor(s: GameState, playerId: string, tileId: number): boolean {
+  const g = TILES[tileId]?.group;
+  if (!g) return false;
+  const ids = GROUP_TILES[g];
+  const ownedOther = ids.filter((id) => id !== tileId && s.tiles[id].owner === playerId).length;
+  return ownedOther >= ids.length - 1;
+}
 
 function valueOf(s: GameState, p: Player, tileId: number): number {
   const tile = TILES[tileId];
@@ -22,9 +30,12 @@ export function botAction(s: GameState): Action | null {
     const bidder = a.current ? playerOf(s, a.current) : null;
     if (!bidder || !bidder.isBot || bidder.bankrupt) return null;
     const price = TILES[a.tile].price ?? 100;
-    const limit = Math.round(price * 0.85);
+    const strategic =
+      completesGroupFor(s, bidder.id, a.tile) ||
+      living(s).some((other) => other.id !== bidder.id && completesGroupFor(s, other.id, a.tile));
+    const limit = Math.round(price * (strategic ? 1.15 : 0.9));
     const next = a.bid === 0 ? Math.round(price * 0.5) : a.bid + Math.max(10, Math.round(price * 0.1));
-    if (next <= limit && next <= bidder.cash - 100) return { type: "BID", amount: next };
+    if (next <= limit && next <= bidder.cash - (strategic ? 60 : 120)) return { type: "BID", amount: next };
     return { type: "PASS_BID" };
   }
 
@@ -34,7 +45,7 @@ export function botAction(s: GameState): Action | null {
     const offer = s.trade;
     const gain = offer.giveCash + offer.giveProps.reduce((a, id) => a + valueOf(s, target, id), 0) + offer.giveCards * 150;
     const loss = offer.wantCash + offer.wantProps.reduce((a, id) => a + valueOf(s, target, id), 0) + offer.wantCards * 150;
-    return { type: "TRADE_RESPOND", accept: gain > loss * 1.15 && offer.giveCash <= target.cash };
+    return { type: "TRADE_RESPOND", accept: gain > loss * 1.15 && offer.wantCash <= target.cash };
   }
 
   if (s.offer) {
@@ -65,6 +76,33 @@ export function botAction(s: GameState): Action | null {
   if (s.phase === "post_roll") {
     const loans = p.loans.reduce((a, l) => a + l.principal, 0);
     if (loans > 0 && p.cash > loans + 600) return { type: "REPAY_LOAN" };
+
+    const mortgagedTarget = p.properties
+      .filter((id) => s.tiles[id].mortgaged)
+      .sort((a, b) => {
+        const ag = TILES[a].group && groupComplete(s, TILES[a].group!, p.id) ? 0 : 1;
+        const bg = TILES[b].group && groupComplete(s, TILES[b].group!, p.id) ? 0 : 1;
+        return ag - bg || (TILES[a].price ?? 0) - (TILES[b].price ?? 0);
+      })[0];
+    if (mortgagedTarget !== undefined) {
+      const redeemCost = Math.ceil(((TILES[mortgagedTarget].price ?? 0) / 2) * 1.1);
+      if (p.cash > redeemCost + 450) return { type: "UNMORTGAGE", tile: mortgagedTarget };
+    }
+
+    if (features(s).shares && s.wave >= 2 && p.cash > 900) {
+      const groups = Object.keys(GROUP_TILES) as Array<keyof typeof GROUP_TILES>;
+      for (const g of groups) {
+        if (p.shares.includes(g)) continue;
+        const ids = GROUP_TILES[g];
+        const rivalDeveloped = ids.some(
+          (id) => s.tiles[id].owner && s.tiles[id].owner !== p.id && s.tiles[id].houses >= 1,
+        );
+        if (!rivalDeveloped) continue;
+        const total = ids.reduce((a, id) => a + (TILES[id].price ?? 0), 0);
+        const sharePrice = Math.round((total * 0.2) / 10) * 10;
+        if (p.cash > sharePrice + 650) return { type: "BUY_SHARE", group: g };
+      }
+    }
 
     if (p.stats.tradeAttempts < 3 && p.cash > 700 && !hasEffect(s, "no_trade")) {
       const groups = Object.keys(GROUP_TILES) as Array<keyof typeof GROUP_TILES>;

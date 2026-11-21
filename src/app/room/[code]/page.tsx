@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { PLAYER_COLORS, TOKENS } from "@/engine/data";
+import { CHARACTERS, PAWN_NAMES, PLAYER_COLORS } from "@/engine/data";
+import type { CharacterId } from "@/engine/types";
+import { PawnAvatar } from "@/components/game/CityArt";
 import { Button, Chip } from "@/components/ui/kit";
 import { QrCode } from "@/components/game/QrCode";
 import { cn } from "@/lib/format";
@@ -150,7 +152,25 @@ export default function RoomPage() {
     }
   };
 
+  const updatePrefs = async (patch: { character?: CharacterId | null; tokenIndex?: number }) => {
+    if (!identity) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/rooms/${code}/ready`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...identity, ...patch }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.room) setRoom(data.room as PublicRoom);
+      sfx.click();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const me = room?.seats.find((s) => s.id === identity?.playerId);
+  const myIdx = Math.max(0, room?.seats.findIndex((s) => s.id === identity?.playerId) ?? 0);
   const isHost = Boolean(me?.isHost);
   const allReady = Boolean(room?.seats.length && room.seats.every((s) => s.ready));
   const hasBot = Boolean(room?.seats.some((s) => s.isBot));
@@ -254,16 +274,27 @@ export default function RoomPage() {
                     isMe && "bg-sun-pale",
                   )}
                 >
-                  <span
-                    className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink text-sm font-bold"
-                    style={{ background: seat ? PLAYER_COLORS[i] : "#EDEDF3" }}
-                  >
-                    {seat ? TOKENS[i] : i + 1}
-                  </span>
-                  <span className="flex-1 truncate text-sm font-bold">
-                    {seat ? seat.name : "Menunggu pemain…"}
-                    {isMe ? " (Kamu)" : ""}
-                  </span>
+                  {seat ? (
+                    <PawnAvatar index={seat.tokenIndex ?? i} color={PLAYER_COLORS[i]} size={34} />
+                  ) : (
+                    <span
+                      className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink text-sm font-bold"
+                      style={{ background: "#EDEDF3" }}
+                    >
+                      {i + 1}
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-bold">
+                      {seat ? seat.name : "Menunggu pemain…"}
+                      {isMe ? " (Kamu)" : ""}
+                    </div>
+                    {seat?.character ? (
+                      <div className="text-[11px] font-semibold text-ink-soft">
+                        {CHARACTERS.find((c) => c.id === seat.character)?.name}
+                      </div>
+                    ) : null}
+                  </div>
                   {seat?.isHost ? <Chip color="#FFD23F">Host</Chip> : null}
                   {seat?.isBot ? <Chip color="#DFE6FF">Bot</Chip> : null}
                   {seat ? (
@@ -310,6 +341,55 @@ export default function RoomPage() {
               )}
             </div>
           )}
+
+          {me ? (
+            <div className="mt-4 rounded-2xl border-[2.5px] border-ink bg-tint p-3.5">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="font-display text-xs font-extrabold uppercase tracking-[0.8px] text-ink-soft">
+                  Bidak &amp; Karakter Kamu
+                </span>
+                <select
+                  aria-label="Karakter"
+                  disabled={busy}
+                  value={me.character ?? "random"}
+                  onChange={(e) =>
+                    void updatePrefs({
+                      character: e.target.value === "random" ? null : (e.target.value as CharacterId),
+                    })
+                  }
+                  className="rounded-full border-2 border-ink bg-white px-2.5 py-1 text-xs font-bold text-ink"
+                >
+                  <option value="random">🎲 Karakter Acak</option>
+                  {CHARACTERS.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.perk})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-8">
+                {PAWN_NAMES.map((pName, tokIdx) => {
+                  const activeTok = (me.tokenIndex ?? myIdx) === tokIdx;
+                  return (
+                    <button
+                      key={tokIdx}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void updatePrefs({ tokenIndex: tokIdx })}
+                      title={pName}
+                      className={cn(
+                        "flex flex-col items-center gap-0.5 rounded-xl border-2 p-1 text-center transition",
+                        activeTok ? "border-ink bg-sun" : "border-transparent bg-white hover:border-ink/40",
+                      )}
+                    >
+                      <PawnAvatar index={tokIdx} color={PLAYER_COLORS[myIdx]} size={30} />
+                      <span className="w-full truncate text-[9px] font-bold text-ink">{pName.split(" ")[0]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           <p className="mt-3 text-xs font-medium text-ink-soft">
             Minimal 2 pemain (atau 1 pemain + Bot), maksimal 4 pemain.

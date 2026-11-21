@@ -76,6 +76,7 @@ export interface Player {
   character: CharacterId;
   color: string;
   token: string;
+  tokenIndex?: number;
   cash: number;
   position: number;
   inJail: boolean;
@@ -85,6 +86,7 @@ export interface Player {
   bankrupt: boolean;
   goldenUsed: boolean;
   goldenActive: boolean;
+  diplomatVetoUsed?: boolean;
   mission: string;
   missionDone: boolean;
   loans: Loan[];
@@ -156,6 +158,7 @@ export interface RentBreakdown {
   shareCut: number;
   characterAdj: number;
   final: number;
+  dividends?: Array<{ playerId: string; amount: number }>;
   notes: string[];
 }
 
@@ -187,6 +190,21 @@ export interface GameState {
   settings: Settings;
   housesBank: number;
   hotelsBank: number;
+  freeParkingPot?: number;
+  lastCard?: {
+    deck: "chance" | "community";
+    title: string;
+    text: string;
+    playerId: string;
+  } | null;
+  reactions?: Array<{
+    id: string;
+    playerId: string;
+    name: string;
+    color: string;
+    emoji: string;
+    at: number;
+  }>;
   engineVersion: string;
 }
 

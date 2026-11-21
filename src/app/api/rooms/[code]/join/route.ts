@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server";
-import { BOT_NAMES } from "@/engine/data";
+import { BOT_NAMES, CHARACTERS, TOKENS } from "@/engine/data";
+import type { CharacterId } from "@/engine/types";
 import { dbGetRoom, dbUpdateRoom, makeToken, publicRoom, type RoomSeat } from "@/lib/online";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function nextFreeTokenIndex(seats: RoomSeat[]): number {
+  const used = new Set(seats.map((s) => s.tokenIndex).filter((x): x is number => x !== undefined));
+  for (let i = 0; i < TOKENS.length; i++) {
+    if (!used.has(i)) return i;
+  }
+  return seats.length % TOKENS.length;
+}
 
 export async function POST(request: Request, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
@@ -12,6 +21,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     addBot?: boolean;
     removeBot?: boolean;
     reclaimId?: string;
+    character?: CharacterId;
+    tokenIndex?: number;
   };
 
   const room = await dbGetRoom(code);
@@ -51,6 +62,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       ready: true,
       isHost: false,
       isBot: true,
+      tokenIndex: nextFreeTokenIndex(room.seats),
     };
     const seats = [...room.seats, seat];
     await dbUpdateRoom(room.code, { seats });
@@ -61,6 +73,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   }
 
   const hasHumanHost = room.seats.some((s) => s.isHost && !s.isBot);
+  const validChar = CHARACTERS.some((c) => c.id === body.character) ? body.character : undefined;
+  const validTok =
+    typeof body.tokenIndex === "number" &&
+    Number.isInteger(body.tokenIndex) &&
+    body.tokenIndex >= 0 &&
+    body.tokenIndex < TOKENS.length
+      ? body.tokenIndex
+      : nextFreeTokenIndex(room.seats);
+
   const seat: RoomSeat = {
     id: `p${room.seats.length + 1}`,
     name: String(body.name || `Pemain ${room.seats.length + 1}`).slice(0, 20),
@@ -68,6 +89,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     ready: false,
     isHost: !hasHumanHost,
     isBot: false,
+    character: validChar,
+    tokenIndex: validTok,
   };
 
   const seats = [...room.seats, seat];

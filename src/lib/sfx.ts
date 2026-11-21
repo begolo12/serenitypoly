@@ -1,10 +1,17 @@
+export type BgmMood = "santai" | "semangat";
+
 let ctx: AudioContext | null = null;
 let muted = false;
+let sfxVolume = 0.75;
+let bgmVolume = 0.45;
+let bgmMood: BgmMood = "santai";
 let bgmTimer: number | null = null;
 let bgmStep = 0;
 
-// Slendro/pelog-inspired warm pentatonic frequencies (C4, D4, E4, G4, A4, C5, D5, E5)
-const BGM_NOTES = [261.63, 329.63, 392.0, 440.0, 523.25, 440.0, 392.0, 293.66];
+// Slendro/pelog-inspired warm pentatonic frequencies (C4, E4, G4, A4, C5, A4, G4, D4)
+const SANTAI_NOTES = [261.63, 329.63, 392.0, 440.0, 523.25, 440.0, 392.0, 293.66];
+// Upbeat party progression (C4, E4, G4, A4, C5, D5, E5, G4)
+const PARTY_NOTES = [261.63, 329.63, 392.0, 440.0, 523.25, 587.33, 659.25, 392.0];
 
 function ac(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -19,10 +26,34 @@ function ac(): AudioContext | null {
   return ctx;
 }
 
+export function getAudioSettings() {
+  return { muted, sfxVolume, bgmVolume, bgmMood, bgmPlaying: bgmTimer !== null };
+}
+
 export function setMuted(value: boolean) {
   muted = value;
   if (typeof window !== "undefined") localStorage.setItem("sp-muted", value ? "1" : "0");
   if (value) stopBgm();
+}
+
+export function setSfxVolume(vol: number) {
+  sfxVolume = Math.max(0, Math.min(1, vol));
+  if (typeof window !== "undefined") localStorage.setItem("sp-sfx-vol", String(sfxVolume));
+}
+
+export function setBgmVolume(vol: number) {
+  bgmVolume = Math.max(0, Math.min(1, vol));
+  if (typeof window !== "undefined") localStorage.setItem("sp-bgm-vol", String(bgmVolume));
+  if (bgmVolume <= 0) stopBgm();
+}
+
+export function setBgmMood(mood: BgmMood) {
+  bgmMood = mood;
+  if (typeof window !== "undefined") localStorage.setItem("sp-bgm-mood", mood);
+  if (bgmTimer !== null) {
+    stopBgm();
+    startBgm();
+  }
 }
 
 export function isMuted() {
@@ -32,6 +63,16 @@ export function isMuted() {
 export function initMute() {
   if (typeof window === "undefined") return;
   muted = localStorage.getItem("sp-muted") === "1";
+  const sv = Number(localStorage.getItem("sp-sfx-vol"));
+  if (Number.isFinite(sv) && localStorage.getItem("sp-sfx-vol") !== null) {
+    sfxVolume = Math.max(0, Math.min(1, sv));
+  }
+  const bv = Number(localStorage.getItem("sp-bgm-vol"));
+  if (Number.isFinite(bv) && localStorage.getItem("sp-bgm-vol") !== null) {
+    bgmVolume = Math.max(0, Math.min(1, bv));
+  }
+  const mood = localStorage.getItem("sp-bgm-mood");
+  if (mood === "santai" || mood === "semangat") bgmMood = mood;
 }
 
 function tone(
@@ -41,9 +82,12 @@ function tone(
   type: OscillatorType = "triangle",
   gain = 0.045,
   endFreq?: number,
+  channel: "sfx" | "bgm" = "sfx",
 ) {
   const a = ac();
-  if (!a || muted) return;
+  const vol = channel === "bgm" ? bgmVolume : sfxVolume;
+  if (!a || muted || vol <= 0.005) return;
+  const effectiveGain = Math.max(0.0005, gain * vol * 1.35);
   const osc = a.createOscillator();
   const g = a.createGain();
   osc.type = type;
@@ -53,7 +97,7 @@ function tone(
     osc.frequency.exponentialRampToValueAtTime(Math.max(40, endFreq), t0 + dur);
   }
   g.gain.setValueAtTime(0.0001, t0);
-  g.gain.exponentialRampToValueAtTime(gain, t0 + Math.min(0.014, dur * 0.35));
+  g.gain.exponentialRampToValueAtTime(effectiveGain, t0 + Math.min(0.014, dur * 0.35));
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   osc.connect(g).connect(a.destination);
   osc.start(t0);
@@ -72,18 +116,24 @@ export function stopBgm() {
 }
 
 export function startBgm() {
-  if (typeof window === "undefined" || bgmTimer !== null || muted) return;
+  if (typeof window === "undefined" || bgmTimer !== null || muted || bgmVolume <= 0.005) return;
+  const isParty = bgmMood === "semangat";
+  const notes = isParty ? PARTY_NOTES : SANTAI_NOTES;
+  const intervalMs = isParty ? 310 : 520;
   const tick = () => {
-    if (muted) return;
-    const freq = BGM_NOTES[bgmStep % BGM_NOTES.length];
-    tone(freq, 0, 0.36, "sine", 0.015);
-    if (bgmStep % 4 === 0) {
-      tone(freq * 0.5, 0, 0.5, "triangle", 0.012);
+    if (muted || bgmVolume <= 0.005) return;
+    const freq = notes[bgmStep % notes.length];
+    tone(freq, 0, isParty ? 0.2 : 0.36, isParty ? "triangle" : "sine", isParty ? 0.016 : 0.015, undefined, "bgm");
+    if (bgmStep % (isParty ? 2 : 4) === 0) {
+      tone(freq * 0.5, 0, isParty ? 0.25 : 0.5, "triangle", isParty ? 0.015 : 0.012, undefined, "bgm");
+    }
+    if (isParty && bgmStep % 4 === 2) {
+      tone(freq * 1.25, 0.06, 0.14, "sine", 0.01, undefined, "bgm");
     }
     bgmStep += 1;
   };
   tick();
-  bgmTimer = window.setInterval(tick, 520);
+  bgmTimer = window.setInterval(tick, intervalMs);
 }
 
 export function toggleBgm(): boolean {
@@ -92,6 +142,7 @@ export function toggleBgm(): boolean {
     return false;
   }
   if (muted) setMuted(false);
+  if (bgmVolume <= 0.005) setBgmVolume(0.45);
   startBgm();
   return isBgmPlaying();
 }
@@ -123,6 +174,12 @@ export const sfx = {
     tone(554.37, 0.07, 0.07, "triangle", 0.045);
     tone(659.25, 0.14, 0.13, "triangle", 0.05);
   },
+  monopoly() {
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, i * 0.07, 0.18, "triangle", 0.055));
+  },
+  jackpot() {
+    [587.33, 739.99, 880, 1174.66, 1479.98].forEach((f, i) => tone(f, i * 0.065, 0.22, "sine", 0.06));
+  },
   auction() {
     tone(260, 0, 0.06, "triangle", 0.055, 150);
     tone(780, 0.06, 0.1, "sine", 0.04);
@@ -138,6 +195,13 @@ export const sfx = {
   join() {
     tone(587.33, 0, 0.08, "sine", 0.04);
     tone(880, 0.08, 0.12, "sine", 0.045);
+  },
+  counterOffer() {
+    tone(440, 0, 0.06, "triangle", 0.045);
+    tone(587.33, 0.06, 0.1, "triangle", 0.05);
+  },
+  reaction() {
+    tone(740, 0, 0.04, "sine", 0.035, 980);
   },
   rent() {
     tone(320, 0, 0.12, "sawtooth", 0.035, 240);

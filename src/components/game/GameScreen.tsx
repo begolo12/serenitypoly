@@ -2,12 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createGame, type SeatConfig } from "@/engine/create";
-import { applyAction, current, features, living, playerOf } from "@/engine/actions";
+import { applyAction, current, features, living, ownedGroupCount, playerOf } from "@/engine/actions";
 import { botAction } from "@/engine/bot";
 import { CHARACTERS, GROUP_NAMES, GROUP_TILES, TILES, WAVE_LABEL } from "@/engine/data";
 import type { Action, GameState, Settings } from "@/engine/types";
 import { Board } from "@/components/game/Board";
 import { PawnAvatar, TileArtwork } from "@/components/game/CityArt";
+import {
+  AudioMixerButton,
+  CardRevealOverlay,
+  ConfettiBurst,
+  EventBreakingBanner,
+} from "@/components/game/GameFx";
 import { MissionCard, PlayerRail, PropertySheet, RentBreakdown, useCashDeltas } from "@/components/game/Panels";
 import {
   AuctionDialog,
@@ -23,7 +29,7 @@ import {
 } from "@/components/game/Dialogs";
 import { Button, Chip, Modal, Tooltip } from "@/components/ui/kit";
 import { cn, rp } from "@/lib/format";
-import { initMute, isBgmPlaying, isMuted, setMuted, sfx, stopBgm, toggleBgm } from "@/lib/sfx";
+import { initMute, isMuted, setMuted, sfx, stopBgm } from "@/lib/sfx";
 
 export type PanelKind = "bank" | "shop" | "trade" | "portfolio" | "mission" | "rules" | "property" | "result" | null;
 
@@ -45,15 +51,13 @@ export function GameScreen({
   const [inspectId, setInspectId] = useState<string | null>(null);
   const [selectedTile, setSelectedTile] = useState<number | null>(null);
   const [gateOpen, setGateOpen] = useState(settings.mode === "hotseat");
-  const [muted, setMutedState] = useState(false);
-  const [bgm, setBgm] = useState(false);
+  const [botSpeed, setBotSpeed] = useState<1 | 2 | 3>(1);
+  const [confettiKey, setConfettiKey] = useState<string | null>(null);
   const [timer, setTimer] = useState(settings.turnTimer);
   const lastTurn = useRef<string>("");
 
   useEffect(() => {
     initMute();
-    setMutedState(isMuted());
-    setBgm(isBgmPlaying());
     return () => stopBgm();
   }, []);
 
@@ -64,36 +68,58 @@ export function GameScreen({
     stateRef.current = next;
     setState(next);
 
-    switch (action.type) {
-      case "ROLL":
-        sfx.dice();
-        break;
-      case "BUY":
-      case "BUY_SHARE":
-      case "BUY_SHOP":
-        sfx.buy();
-        break;
-      case "BUILD":
-        sfx.build();
-        break;
-      case "BID":
-      case "PASS_BID":
-        sfx.auction();
-        break;
-      case "PAY_JAIL":
-        sfx.jail();
-        break;
-      case "END_TURN":
-        sfx.turn();
-        break;
-      default:
-        sfx.click();
+    const newMono = next.players.some(
+      (pl) => !pl.bankrupt && ownedGroupCount(next, pl.id) > ownedGroupCount(prev, pl.id),
+    );
+    const hitJackpot =
+      Boolean(prev.settings.freeParkingPot) &&
+      (prev.freeParkingPot ?? 0) > 0 &&
+      (next.freeParkingPot ?? 0) === 0;
+    const isCounter = Boolean(
+      action.type === "TRADE_OFFER" && prev.trade && next.trade && next.trade.from === prev.trade.to,
+    );
+
+    if (hitJackpot) {
+      sfx.jackpot();
+      setConfettiKey(`pot-${next.version}`);
+    } else if (newMono) {
+      sfx.monopoly();
+      setConfettiKey(`mono-${next.version}`);
+    } else if (isCounter) {
+      sfx.counterOffer();
+    } else {
+      switch (action.type) {
+        case "ROLL":
+          sfx.dice();
+          break;
+        case "BUY":
+        case "BUY_SHARE":
+        case "BUY_SHOP":
+          sfx.buy();
+          break;
+        case "BUILD":
+          sfx.build();
+          break;
+        case "BID":
+        case "PASS_BID":
+          sfx.auction();
+          break;
+        case "PAY_JAIL":
+          sfx.jail();
+          break;
+        case "END_TURN":
+          sfx.turn();
+          break;
+        default:
+          sfx.click();
+      }
     }
 
     if (next.phase === "game_over" && prev.phase !== "game_over") {
       sfx.win();
+      setConfettiKey(`win-${next.version}`);
       setPanel("result");
-    } else {
+    } else if (!hitJackpot && !newMono) {
       const last = next.log[next.log.length - 1];
       if (last?.tone === "warn") sfx.bad();
       else if (last?.tone === "money") sfx.coin();
@@ -128,12 +154,13 @@ export function GameScreen({
   useEffect(() => {
     if (state.phase === "game_over" || gateOpen) return;
     if (!botPending) return;
+    const delay = botSpeed === 3 ? 150 : botSpeed === 2 ? 340 : 650;
     const t = window.setTimeout(() => {
       const action = botAction(state);
       act(action ?? { type: "END_TURN" });
-    }, 650);
+    }, delay);
     return () => window.clearTimeout(t);
-  }, [state.version, state.phase, gateOpen, botPending, state, act]);
+  }, [state.version, state.phase, gateOpen, botPending, botSpeed, state, act]);
 
   useEffect(() => {
     if (!settings.turnTimer || gateOpen || isBot || state.phase === "game_over") return;
@@ -165,25 +192,58 @@ export function GameScreen({
     setPanel(null);
   };
 
-  const toggleMute = () => {
-    const next = !muted;
-    setMuted(next);
-    setMutedState(next);
-    if (next) setBgm(false);
-  };
-
-  const handleBgm = () => {
-    const active = toggleBgm();
-    setBgm(active);
-    if (active) setMutedState(false);
-  };
-
   const canAct = !isBot && !gateOpen && state.phase !== "auction" && !state.trade;
   const canRollOnBoard = Boolean(canAct && (state.phase === "await_roll" || state.phase === "jail") && !state.offer);
   const waveText = WAVE_LABEL[state.wave].charAt(0) + WAVE_LABEL[state.wave].slice(1).toLowerCase();
+  const cardPlayer = state.lastCard ? playerOf(state, state.lastCard.playerId) : null;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const k = e.key.toLowerCase();
+      if (k === "m") {
+        setMuted(!isMuted());
+        return;
+      }
+      if (panel || inspectId || gateOpen || state.phase === "game_over") return;
+      if (e.code === "Space" && canAct && !state.offer) {
+        if (state.phase === "await_roll" || state.phase === "jail") {
+          e.preventDefault();
+          act({ type: "ROLL" });
+        } else if (state.phase === "post_roll") {
+          e.preventDefault();
+          act({ type: "END_TURN" });
+        }
+        return;
+      }
+      if (k === "b") setPanel("bank");
+      else if (k === "a") setPanel("portfolio");
+      else if (k === "t" && canAct) setPanel("trade");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [panel, inspectId, gateOpen, state.phase, state.offer, canAct, act]);
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[1600px] flex-col gap-3 px-3 py-2.5 md:px-5">
+      <ConfettiBurst triggerKey={confettiKey} />
+      <CardRevealOverlay
+        card={state.lastCard}
+        playerName={cardPlayer?.name}
+        playerColor={cardPlayer?.color}
+        round={state.round}
+      />
+      <EventBreakingBanner event={state.event} round={state.round} />
       {/* Top Navbar */}
       <header className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-2">
@@ -213,7 +273,7 @@ export function GameScreen({
         ) : null}
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <Tooltip tip="Kelola, bangun rumah, dan gadaikan propertimu" position="bottom">
+          <Tooltip tip="Kelola, bangun rumah, dan gadaikan propertimu (A)" position="bottom">
             <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("portfolio")}>
               🏘️ Asetku
             </Button>
@@ -223,7 +283,7 @@ export function GameScreen({
               🎯 Misi
             </Button>
           </Tooltip>
-          <Tooltip tip="Ajukan pinjaman atau beli saham grup kota" position="bottom">
+          <Tooltip tip="Ajukan pinjaman atau beli saham grup kota (B)" position="bottom">
             <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("bank")}>
               🏦 Bank
             </Button>
@@ -235,7 +295,7 @@ export function GameScreen({
               </Button>
             </Tooltip>
           ) : null}
-          <Tooltip tip={canAct ? "Tawarkan barter properti atau uang ke pemain lain" : "Tunggu giliranmu untuk berdagang"} position="bottom">
+          <Tooltip tip={canAct ? "Tawarkan barter properti atau uang ke pemain lain (T)" : "Tunggu giliranmu untuk berdagang"} position="bottom">
             <Button
               variant="ghost"
               className="min-h-0 px-3 py-1.5 text-xs"
@@ -245,16 +305,21 @@ export function GameScreen({
               🤝 Dagang
             </Button>
           </Tooltip>
-          <Tooltip tip={bgm ? "Matikan musik latar" : "Putar musik latar"} position="bottom">
-            <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={handleBgm} aria-label="Musik latar">
-              {bgm ? "🎵" : "🎶"}
-            </Button>
-          </Tooltip>
-          <Tooltip tip={muted ? "Aktifkan efek suara" : "Bisukan efek suara"} position="bottom">
-            <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={toggleMute} aria-label="Suara">
-              {muted ? "🔇" : "🔊"}
-            </Button>
-          </Tooltip>
+          {state.players.some((p) => p.isBot) ? (
+            <Tooltip tip="Kecepatan giliran Bot AI (1× / 2× / 3×)" position="bottom">
+              <Button
+                variant="ghost"
+                className="min-h-0 px-2.5 py-1.5 font-mono text-xs"
+                onClick={() => {
+                  sfx.click();
+                  setBotSpeed((v) => (v === 1 ? 2 : v === 2 ? 3 : 1));
+                }}
+              >
+                ⏩ {botSpeed}×
+              </Button>
+            </Tooltip>
+          ) : null}
+          <AudioMixerButton />
           <Tooltip tip="Buku aturan ringkas" position="bottom">
             <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={() => openShared("rules")}>
               📖
@@ -365,7 +430,7 @@ function TurnCard({ state }: { state: GameState }) {
         </span>
       ) : null}
       <div className="flex items-center gap-3">
-        <PawnAvatar index={state.turnIndex} color={me?.color ?? "#FFD23F"} size={48} />
+        <PawnAvatar index={me?.tokenIndex ?? state.turnIndex} color={me?.color ?? "#FFD23F"} size={48} />
         <div className="min-w-0 flex-1">
           <div className="truncate font-display text-lg font-extrabold leading-tight">{me?.name}</div>
           <Tooltip
