@@ -261,7 +261,13 @@ export function Board({
   }, [state.lastMove]);
 
   const currentPos = current ? pos[current.id] ?? current.position : 0;
-  const spotlightId = hoveredTile ?? selected ?? currentPos;
+  const activePriorityTile =
+    state.auction?.tile ??
+    state.offer?.tile ??
+    state.trade?.wantProps[0] ??
+    state.trade?.giveProps[0] ??
+    null;
+  const spotlightId = hoveredTile ?? selected ?? activePriorityTile ?? currentPos;
   const spotlightTile = TILES[spotlightId];
   const spotlightState = state.tiles[spotlightTile.id];
   const spotlightOwner = spotlightState?.owner ? playerOf(state, spotlightState.owner) : null;
@@ -283,6 +289,11 @@ export function Board({
           const canClick = tile.type === "property" || tile.type === "transport" || tile.type === "utility";
           const isCurrentTarget = current && !current.bankrupt && currentPos === tile.id;
           const isTrail = trailSet.has(tile.id);
+          const isCorner = tile.id === 0 || tile.id === 10 || tile.id === 20 || tile.id === 30;
+          const isAuctionTile = state.auction?.tile === tile.id;
+          const isOfferTile = state.offer?.tile === tile.id;
+          const isTradeGive = Boolean(state.trade?.giveProps.includes(tile.id));
+          const isTradeWant = Boolean(state.trade?.wantProps.includes(tile.id));
 
           return (
             <button
@@ -295,19 +306,26 @@ export function Board({
                 canClick ? "cursor-pointer hover:brightness-[0.97]" : "cursor-default",
                 selected === tile.id ? "z-10 ring-[3px] ring-inset ring-blue" : "",
                 isCurrentTarget && "z-10 animate-[tile-pulse_1.8s_ease-out_infinite]",
+                (isAuctionTile || isOfferTile || isTradeGive || isTradeWant) &&
+                  "z-10 ring-[3px] ring-inset ring-ink",
+                isCorner && "ring-[2px] ring-inset ring-ink/20",
               )}
               style={{
                 gridColumn: col,
                 gridRow: row,
-                background: tileSurface(tile),
+                background:
+                  owner && tile.group
+                    ? `${GROUP_COLORS[tile.group]}24`
+                    : tileSurface(tile),
               }}
               aria-label={`${tile.name}${owner ? `, milik ${owner.name}` : ""}`}
             >
               {tile.group ? (
                 <div
-                  className="flex h-[20%] w-full shrink-0 items-center justify-between border-b-[2px] border-ink px-[3px]"
+                  className="relative flex h-[22%] w-full shrink-0 items-center justify-between border-b-[2px] border-ink px-[3px]"
                   style={{ background: GROUP_COLORS[tile.group] }}
                 >
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-white/45" />
                   {st.houses > 0 ? <BuildingBadge houses={st.houses} /> : <span />}
                   {isMonopoly ? (
                     <span
@@ -327,7 +345,7 @@ export function Board({
                     tileId={tile.id}
                     className={cn(
                       "transition-transform duration-200 group-hover:scale-110",
-                      tile.group ? "h-[2.35em] w-[2.35em]" : "h-[2.75em] w-[2.75em]",
+                      tile.group ? "h-[2.3em] w-[2.3em]" : "h-[2.75em] w-[2.75em]",
                     )}
                   />
                 </div>
@@ -336,16 +354,46 @@ export function Board({
                     {tile.short}
                   </div>
                   {tile.price ? (
-                    <div className="money font-semibold text-ink-soft" style={{ fontSize: "0.67em" }}>
+                    <div
+                      className="money mx-auto inline-block rounded-full bg-ink/[0.07] px-1 py-[0.5px] font-semibold text-ink-soft"
+                      style={{ fontSize: "0.64em" }}
+                    >
                       {tile.price}
                     </div>
                   ) : tile.tax ? (
-                    <div className="money font-bold text-tomato" style={{ fontSize: "0.67em" }}>
+                    <div className="money font-bold text-tomato" style={{ fontSize: "0.66em" }}>
                       -{tile.tax}
                     </div>
                   ) : null}
                 </div>
               </div>
+
+              {/* Active Auction / Offer / Trade Badge on Tile */}
+              {isAuctionTile ? (
+                <span
+                  className="pointer-events-none absolute left-1/2 top-[23%] z-10 -translate-x-1/2 rounded-full border border-ink bg-sun px-1 py-[0.5px] font-bold leading-none text-ink animate-[pulse-dot_1.5s_ease-out_infinite]"
+                  style={{ fontSize: "0.58em" }}
+                >
+                  🔨Lelang
+                </span>
+              ) : isTradeGive || isTradeWant ? (
+                <span
+                  className={cn(
+                    "pointer-events-none absolute left-1/2 top-[23%] z-10 -translate-x-1/2 rounded-full border border-ink px-1 py-[0.5px] font-bold leading-none animate-[pulse-dot_1.5s_ease-out_infinite]",
+                    isTradeGive ? "bg-tomato text-white" : "bg-blue text-white",
+                  )}
+                  style={{ fontSize: "0.58em" }}
+                >
+                  🤝Tukar
+                </span>
+              ) : isOfferTile ? (
+                <span
+                  className="pointer-events-none absolute left-1/2 top-[23%] z-10 -translate-x-1/2 rounded-full border border-ink bg-mint px-1 py-[0.5px] font-bold leading-none text-ink"
+                  style={{ fontSize: "0.58em" }}
+                >
+                  🏷️Beli
+                </span>
+              ) : null}
 
               {/* Stepping-stone movement trail dot */}
               {isTrail && !isCurrentTarget ? (
@@ -373,7 +421,7 @@ export function Board({
 
               {isMine ? (
                 <span
-                  className="absolute right-[2px] top-[22%] h-[6px] w-[6px] rounded-full border border-ink bg-mint"
+                  className="absolute right-[2px] top-[23%] h-[6px] w-[6px] rounded-full border border-ink bg-mint"
                   title="Milikmu"
                 />
               ) : null}
@@ -386,6 +434,16 @@ export function Board({
           className="relative flex flex-col gap-[1.6%] overflow-hidden bg-tint p-[2%]"
           style={{ gridColumn: "2 / 11", gridRow: "2 / 11" }}
         >
+          {/* Subtle Nusantara Compass & Archipelago Watermark */}
+          <svg
+            viewBox="0 0 400 400"
+            className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.05]"
+            aria-hidden="true"
+          >
+            <circle cx="200" cy="200" r="145" stroke="#16142B" strokeWidth="3" strokeDasharray="8 8" fill="none" />
+            <circle cx="200" cy="200" r="95" stroke="#16142B" strokeWidth="2" fill="none" />
+            <path d="M200 35L218 182L365 200L218 218L200 365L182 218L35 200L182 182Z" fill="#16142B" />
+          </svg>
           {/* Floating Live Action Toast Banner */}
           {toast ? (
             <div
@@ -553,7 +611,17 @@ export function Board({
                 {/* Header & Landmark Banner */}
                 <div className="flex items-center justify-between gap-1">
                   <span className="font-bold uppercase tracking-[0.08em] text-ink-soft" style={{ fontSize: "0.64em" }}>
-                    {hoveredTile !== null ? "Sorotan Petak" : selected !== null ? "Petak Dipilih" : "Posisi Aktif"}
+                    {hoveredTile !== null
+                      ? "Sorotan Petak"
+                      : selected !== null
+                        ? "Petak Dipilih"
+                        : state.auction?.tile === spotlightTile.id
+                          ? "🔨 Lelang Berjalan"
+                          : state.trade
+                            ? "🤝 Sedang Ditawar"
+                            : state.offer?.tile === spotlightTile.id
+                              ? "🏷️ Tawaran Beli"
+                              : "Posisi Aktif"}
                   </span>
                   <span
                     className="rounded-full border-[1.5px] border-ink px-2 py-[1px] font-bold"

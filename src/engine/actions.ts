@@ -1085,16 +1085,24 @@ export function applyAction(prev: GameState, action: Action): GameState {
 
     case "TRADE_OFFER": {
       if (hasEffect(s, "no_trade")) break;
-      if (action.offer.from !== p.id) break;
-      if (action.offer.giveCash > p.cash) break;
+      const isCounter = Boolean(s.trade && s.trade.to === action.offer.from);
+      const sender = isCounter ? playerOf(s, action.offer.from) : p;
+      if (!sender || sender.bankrupt) break;
+      if (!isCounter && action.offer.from !== p.id) break;
+      if (action.offer.giveCash > sender.cash) break;
       const target = playerOf(s, action.offer.to);
-      if (!target || target.bankrupt) break;
+      if (!target || target.bankrupt || target.id === sender.id) break;
       if (action.offer.wantCash > target.cash) break;
       if (target.character === "diplomat" && target.hand.includes("veto")) break;
       s.trade = action.offer;
       s.phase = "post_roll";
-      p.stats.tradeAttempts += 1;
-      pushLog(s, `${p.name} mengajukan tawaran dagang ke ${target.name}.`);
+      sender.stats.tradeAttempts += 1;
+      pushLog(
+        s,
+        isCounter
+          ? `${sender.name} mengajukan tawaran balik ke ${target.name}.`
+          : `${sender.name} mengajukan tawaran dagang ke ${target.name}.`,
+      );
       break;
     }
 

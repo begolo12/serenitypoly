@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createGame, type SeatConfig } from "@/engine/create";
 import { applyAction, current, features, living, playerOf } from "@/engine/actions";
 import { botAction } from "@/engine/bot";
-import { CHARACTERS, TILES, WAVE_LABEL } from "@/engine/data";
+import { CHARACTERS, GROUP_NAMES, GROUP_TILES, TILES, WAVE_LABEL } from "@/engine/data";
 import type { Action, GameState, Settings } from "@/engine/types";
 import { Board } from "@/components/game/Board";
 import { PawnAvatar, TileArtwork } from "@/components/game/CityArt";
@@ -15,6 +15,7 @@ import {
   MissionDialog,
   PassGate,
   PlayerDetailDialog,
+  PortfolioDialog,
   ResultDialog,
   RulesDialog,
   ShopDialog,
@@ -24,7 +25,7 @@ import { Button, Chip, Modal, Tooltip } from "@/components/ui/kit";
 import { cn, rp } from "@/lib/format";
 import { initMute, isBgmPlaying, isMuted, setMuted, sfx, stopBgm, toggleBgm } from "@/lib/sfx";
 
-export type PanelKind = "bank" | "shop" | "trade" | "mission" | "rules" | "property" | "result" | null;
+export type PanelKind = "bank" | "shop" | "trade" | "portfolio" | "mission" | "rules" | "property" | "result" | null;
 
 export function GameScreen({
   settings,
@@ -212,6 +213,11 @@ export function GameScreen({
         ) : null}
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <Tooltip tip="Kelola, bangun rumah, dan gadaikan propertimu" position="bottom">
+            <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("portfolio")}>
+              🏘️ Asetku
+            </Button>
+          </Tooltip>
           <Tooltip tip="Lihat misi rahasiamu" position="bottom">
             <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("mission")}>
               🎯 Misi
@@ -293,8 +299,24 @@ export function GameScreen({
       </div>
 
       {gateOpen && me ? <PassGate name={me.name} onContinue={() => setGateOpen(false)} /> : null}
-      {state.auction ? <AuctionDialog state={state} act={act} /> : null}
-      <TradeDialog state={state} act={act} open={panel === "trade"} onClose={() => setPanel(null)} />
+      {state.auction ? (
+        <AuctionDialog state={state} act={act} onFocusTile={(id) => setSelectedTile(id)} />
+      ) : null}
+      <TradeDialog
+        state={state}
+        act={act}
+        open={panel === "trade"}
+        onClose={() => setPanel(null)}
+        onFocusTile={(id) => setSelectedTile(id)}
+      />
+      <PortfolioDialog
+        state={state}
+        act={act}
+        open={panel === "portfolio"}
+        onClose={() => setPanel(null)}
+        canAct={!!canAct}
+        onOpenBank={() => setPanel("bank")}
+      />
       <ShopDialog state={state} act={act} open={panel === "shop"} onClose={() => setPanel(null)} />
       <BankDialog state={state} act={act} open={panel === "bank"} onClose={() => setPanel(null)} />
       <MissionDialog state={state} open={panel === "mission"} onClose={() => setPanel(null)} />
@@ -312,6 +334,7 @@ export function GameScreen({
             tileId={selectedTile}
             act={act}
             onClose={() => setPanel(null)}
+            onSelectTile={(id) => setSelectedTile(id)}
           />
         ) : null}
       </Modal>
@@ -421,6 +444,10 @@ export function ActionPanel({
     const tile = TILES[state.offer.tile];
     const price = state.offer.price;
     const affordable = me.cash >= price;
+    const groupIds = tile.group ? GROUP_TILES[tile.group] : [];
+    const ownedInGroup = groupIds.filter((id) => state.tiles[id].owner === me.id).length;
+    const completesMonopoly = Boolean(tile.group && ownedInGroup === groupIds.length - 1);
+
     return (
       <div className="panel space-y-3 p-4">
         <div className="flex items-center gap-3">
@@ -432,6 +459,19 @@ export function ActionPanel({
             <div className="truncate font-display text-lg font-extrabold">{tile.name}</div>
           </div>
         </div>
+
+        {tile.group ? (
+          <div
+            className={cn(
+              "rounded-2xl border-2 border-ink px-3 py-1.5 text-xs font-bold",
+              completesMonopoly ? "bg-mint text-ink" : "bg-tint text-ink-soft",
+            )}
+          >
+            {completesMonopoly
+              ? `✨ Beli ini untuk melengkapi Monopoli ${GROUP_NAMES[tile.group]}!`
+              : `Grup ${GROUP_NAMES[tile.group]}: kamu sudah punya ${ownedInGroup}/${groupIds.length}`}
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-2 rounded-2xl border-2 border-ink bg-tint p-2.5">
           <div>
@@ -456,8 +496,32 @@ export function ActionPanel({
             Lelang / Lewati
           </Button>
         </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Tooltip tip="Ambil pinjaman bank atau jual saham untuk tambah modal" className="w-full">
+            <Button
+              className="min-h-0 w-full px-2 py-1.5 text-[11px]"
+              disabled={!canAct}
+              onClick={() => onOpen("bank")}
+            >
+              🏦 Pinjam Bank
+            </Button>
+          </Tooltip>
+          <Tooltip tip="Gadaikan atau jual rumah aset lain untuk tambah dana" className="w-full">
+            <Button
+              className="min-h-0 w-full px-2 py-1.5 text-[11px]"
+              disabled={!canAct || me.properties.length === 0}
+              onClick={() => onOpen("portfolio")}
+            >
+              🏘️ Kelola / Gadai
+            </Button>
+          </Tooltip>
+        </div>
+
         {!affordable ? (
-          <p className="text-xs font-bold text-tomato">Dana kurang {rp(price - me.cash)} lagi.</p>
+          <p className="text-xs font-bold text-tomato">
+            Dana kurang {rp(price - me.cash)} lagi — bisa pinjam bank atau gadai aset dulu!
+          </p>
         ) : null}
       </div>
     );
@@ -517,10 +581,6 @@ export function ActionPanel({
     );
   }
 
-  const nextBuildable = me.properties.find((id) => {
-    const t = TILES[id];
-    return t.group && state.tiles[id].houses < 5;
-  });
   const mortgageable = me.properties.find((id) => state.tiles[id].houses === 0 && !state.tiles[id].mortgaged);
 
   return (
@@ -531,44 +591,34 @@ export function ActionPanel({
       <div className="grid grid-cols-2 gap-2">
         <Tooltip
           tip={
-            !nextBuildable
-              ? "Perlu memiliki properti satu grup warna lengkap untuk membangun rumah/hotel"
-              : "Bangun rumah atau hotel di properti milikmu"
+            me.properties.length === 0
+              ? "Belum punya properti untuk dikelola"
+              : "Lihat semua propertimu, bangun rumah/hotel, atau jual bangunan"
           }
           className="w-full"
         >
           <Button
             className="min-h-0 w-full px-3 py-2 text-xs"
-            disabled={!canAct || !nextBuildable}
-            onClick={() => {
-              if (nextBuildable !== undefined) {
-                setSelectedTile(nextBuildable);
-                onOpen("property");
-              }
-            }}
+            disabled={!canAct || me.properties.length === 0}
+            onClick={() => onOpen("portfolio")}
           >
-            🏠 Bangun
+            🏠 Bangun / Aset
           </Button>
         </Tooltip>
         <Tooltip
           tip={
             !mortgageable
               ? "Tidak ada properti bebas bangunan yang bisa digadaikan"
-              : "Gadaikan properti (tanpa bangunan) untuk menerima 50% dana cepat"
+              : "Gadaikan atau tebus properti milikmu"
           }
           className="w-full"
         >
           <Button
             className="min-h-0 w-full px-3 py-2 text-xs"
-            disabled={!canAct || !mortgageable}
-            onClick={() => {
-              if (mortgageable !== undefined) {
-                setSelectedTile(mortgageable);
-                onOpen("property");
-              }
-            }}
+            disabled={!canAct || me.properties.length === 0}
+            onClick={() => onOpen("portfolio")}
           >
-            🏦 Gadai
+            🏦 Gadai / Tebus
           </Button>
         </Tooltip>
         {!compact ? (

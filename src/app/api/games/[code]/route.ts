@@ -13,7 +13,10 @@ type IncomingAction = Action | { type: "BOT_STEP" };
 function actorFor(state: GameState, action: Action): string | null {
   if (action.type === "BID" || action.type === "PASS_BID") return state.auction?.current ?? null;
   if (action.type === "TRADE_RESPOND") return state.trade?.to ?? null;
-  if (action.type === "TRADE_OFFER") return action.offer.from;
+  if (action.type === "TRADE_OFFER") {
+    if (state.trade?.to === action.offer.from) return action.offer.from;
+    return state.players[state.turnIndex]?.id === action.offer.from ? action.offer.from : null;
+  }
   return state.players[state.turnIndex]?.id ?? null;
 }
 

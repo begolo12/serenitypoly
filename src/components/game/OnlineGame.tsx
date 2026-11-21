@@ -13,6 +13,7 @@ import {
   BankDialog,
   MissionDialog,
   PlayerDetailDialog,
+  PortfolioDialog,
   ResultDialog,
   RulesDialog,
   ShopDialog,
@@ -498,6 +499,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
               tileId={selectedTile}
               act={() => {}}
               canAct={false}
+              onSelectTile={(id) => setSelectedTile(id)}
               onClose={() => setPanel(null)}
             />
           ) : null}
@@ -760,6 +762,9 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
             >
               🏠 Propertiku ({myPlayer.properties.length})
             </Button>
+            <Button className="text-xs" onClick={() => setPanel("portfolio")}>
+              🏘️ Bangun / Gadai
+            </Button>
             <Button className="text-xs" onClick={() => setPanel("bank")}>
               🏦 Bank &amp; Saham
             </Button>
@@ -856,8 +861,37 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
         </div>
       )}
 
-      {state.auction ? <AuctionDialog state={state} act={act} viewerId={myId} /> : null}
-      <TradeDialog state={state} act={act} open={panel === "trade"} onClose={() => setPanel(null)} viewerId={myId} />
+      {state.auction ? (
+        <AuctionDialog
+          state={state}
+          act={act}
+          viewerId={myId}
+          onFocusTile={(id) => {
+            setSelectedTile(id);
+            setShowBoardOnMobile(true);
+          }}
+        />
+      ) : null}
+      <TradeDialog
+        state={state}
+        act={act}
+        open={panel === "trade"}
+        onClose={() => setPanel(null)}
+        viewerId={myId}
+        onFocusTile={(id) => {
+          setSelectedTile(id);
+          setShowBoardOnMobile(true);
+        }}
+      />
+      <PortfolioDialog
+        state={state}
+        act={act}
+        open={panel === "portfolio"}
+        onClose={() => setPanel(null)}
+        viewerId={myId}
+        canAct={canAct}
+        onOpenBank={() => setPanel("bank")}
+      />
       <ShopDialog state={state} act={act} open={panel === "shop"} onClose={() => setPanel(null)} viewerId={myId} canAct={canAct} />
       <BankDialog state={state} act={act} open={panel === "bank"} onClose={() => setPanel(null)} viewerId={myId} canAct={canAct} />
       <MissionDialog state={state} open={panel === "mission"} onClose={() => setPanel(null)} viewerId={myId} />
@@ -876,6 +910,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
             act={act}
             viewerId={myId}
             canAct={canAct}
+            onSelectTile={(id) => setSelectedTile(id)}
             onClose={() => setPanel(null)}
           />
         ) : null}

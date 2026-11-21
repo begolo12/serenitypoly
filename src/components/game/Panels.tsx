@@ -114,6 +114,47 @@ export function PlayerRail({ state, onInspect }: { state: GameState; onInspect: 
 
               <div className="money mt-2 text-lg font-extrabold text-ink">{rp(p.cash)}</div>
 
+              {/* Visual Property Matrix Dots */}
+              {p.properties.length > 0 ? (
+                <div className="mt-2 flex flex-wrap items-center gap-1">
+                  {(Object.keys(GROUP_TILES) as Array<keyof typeof GROUP_TILES>).map((g) => {
+                    const ids = GROUP_TILES[g];
+                    const owned = ids.filter((id) => state.tiles[id].owner === p.id);
+                    if (owned.length === 0) return null;
+                    const mono = owned.length === ids.length;
+                    return (
+                      <span
+                        key={g}
+                        className="inline-flex items-center gap-[2px] rounded-full border border-ink px-1.5 py-[2px]"
+                        style={{ background: GROUP_COLORS[g] }}
+                        title={`${GROUP_NAMES[g]}: ${owned.length}/${ids.length}${mono ? " (Monopoli!)" : ""}`}
+                      >
+                        {ids.map((id) => (
+                          <span
+                            key={id}
+                            className={cn(
+                              "h-[5px] w-[5px] rounded-full border border-ink",
+                              state.tiles[id].owner === p.id ? "bg-white" : "bg-ink/20",
+                            )}
+                          />
+                        ))}
+                        {mono ? <span className="text-[9px] font-black leading-none text-ink">★</span> : null}
+                      </span>
+                    );
+                  })}
+                  {p.properties.some((id) => TILES[id].type === "transport") ? (
+                    <span className="rounded-full border border-ink bg-blue-pale px-1.5 py-[1px] text-[9px] font-bold">
+                      🚆×{p.properties.filter((id) => TILES[id].type === "transport").length}
+                    </span>
+                  ) : null}
+                  {p.properties.some((id) => TILES[id].type === "utility") ? (
+                    <span className="rounded-full border border-ink bg-tint px-1.5 py-[1px] text-[9px] font-bold">
+                      ⚡×{p.properties.filter((id) => TILES[id].type === "utility").length}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] font-semibold">
                 <span className="rounded-full border border-ink/25 bg-tint px-2 py-0.5 text-ink">
                   {p.properties.length} petak
@@ -145,6 +186,7 @@ export function PropertySheet({
   onClose,
   viewerId,
   canAct = true,
+  onSelectTile,
 }: {
   state: GameState;
   tileId: number;
@@ -152,6 +194,7 @@ export function PropertySheet({
   onClose: () => void;
   viewerId?: string | null;
   canAct?: boolean;
+  onSelectTile?: (tileId: number) => void;
 }) {
   const tile = TILES[tileId];
   const st = state.tiles[tileId];
@@ -202,6 +245,38 @@ export function PropertySheet({
           </div>
         </div>
       </div>
+
+      {group ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {GROUP_TILES[group].map((sid) => {
+            const sOwner = playerOf(state, state.tiles[sid].owner);
+            const active = sid === tileId;
+            return (
+              <button
+                key={sid}
+                type="button"
+                onClick={() => onSelectTile?.(sid)}
+                disabled={!onSelectTile}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border-2 border-ink px-2.5 py-1 text-xs font-bold transition-colors",
+                  active ? "bg-ink text-white" : "bg-white hover:bg-sun-pale",
+                )}
+              >
+                <span
+                  className="h-2.5 w-2.5 rounded-full border border-ink"
+                  style={{ background: sOwner ? sOwner.color : "#EDEDF3" }}
+                />
+                <span>{TILES[sid].short}</span>
+                {state.tiles[sid].houses > 0 ? (
+                  <span className="text-[10px]">
+                    {state.tiles[sid].houses === 5 ? "★H" : `🏠${state.tiles[sid].houses}`}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       {buyable ? (
         <div className="grid grid-cols-2 gap-2.5">
