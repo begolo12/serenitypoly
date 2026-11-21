@@ -357,7 +357,7 @@ export default function RoomPage() {
                       character: e.target.value === "random" ? null : (e.target.value as CharacterId),
                     })
                   }
-                  className="rounded-full border-2 border-ink bg-white px-2.5 py-1 text-xs font-bold text-ink"
+                  className="max-w-[175px] truncate rounded-full border-2 border-ink bg-white px-2.5 py-1 text-xs font-bold text-ink sm:max-w-none"
                 >
                   <option value="random">🎲 Karakter Acak</option>
                   {CHARACTERS.map((c) => (

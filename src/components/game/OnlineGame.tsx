@@ -651,28 +651,30 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
       />
       <EventBreakingBanner event={state.event} round={state.round} />
       <ReactionOverlay reactions={state.reactions} />
-      <header className="flex flex-wrap items-center gap-1.5">
-        <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg border-2 border-ink bg-sun text-xs">
+      <header className="flex items-center justify-between gap-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 border-ink bg-sun text-xs">
             🎲
           </span>
-          <span className="font-display text-base font-extrabold tracking-tight md:text-xl">
+          <span className="hidden font-display text-base font-extrabold tracking-tight sm:inline md:text-xl">
             Serenity<span className="text-tomato">Poly</span>
           </span>
+          <Chip color="#FFD23F" className="text-[11px]">
+            R{state.round}
+          </Chip>
+          <Chip color="#DFE6FF" className="hidden sm:inline-flex">
+            {waveText} · {code}
+          </Chip>
+          <Chip color={connRetry ? "#FFE4DD" : "#D5F7E8"} className="text-[11px]">
+            {connRetry ? "🟡 Retry" : "🟢 Live"}
+          </Chip>
+          {state.event ? <Chip color="#FFE4DD" className="hidden sm:inline-flex">⚡ {state.event.label}</Chip> : null}
         </div>
-        <Chip color="#FFD23F">
-          R{state.round} · {waveText}
-        </Chip>
-        <Chip color="#DFE6FF">Room {code}</Chip>
-        <Chip color={connRetry ? "#FFE4DD" : "#D5F7E8"}>
-          {connRetry ? "🟡 Retry" : "🟢 Live"}
-        </Chip>
-        {state.event ? <Chip color="#FFE4DD">⚡ {state.event.label}</Chip> : null}
-        <div className="ml-auto flex flex-wrap items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {myPlayer ? (
             <Button
               variant={showBoardOnMobile ? "sun" : "default"}
-              className="min-h-0 px-3 py-1 text-xs"
+              className="min-h-0 px-2.5 py-1 text-xs"
               onClick={() => setShowBoardOnMobile((v) => !v)}
             >
               {showBoardOnMobile ? "🎮 Kontroler" : "🗺️ Papan"}
@@ -874,9 +876,9 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
             </div>
           )}
 
-          <div className="flex items-center justify-between gap-2 rounded-2xl border-[2.5px] border-ink bg-white px-3 py-2">
-            <span className="text-[11px] font-bold uppercase tracking-[0.8px] text-ink-soft">Reaksi TV</span>
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center justify-between gap-2 rounded-2xl border-[2.5px] border-ink bg-white px-2.5 py-2">
+            <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.8px] text-ink-soft">Reaksi</span>
+            <div className="grid flex-1 grid-cols-6 gap-1">
               {REACTION_EMOJIS.map((em) => (
                 <button
                   key={em}
@@ -884,7 +886,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
                   disabled={reactCoolUntil > 0}
                   onClick={() => void sendReaction(em)}
                   className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink bg-tint text-base transition active:scale-90",
+                    "flex h-8 items-center justify-center rounded-full border-2 border-ink bg-tint text-sm transition active:scale-90",
                     reactCoolUntil > 0 ? "opacity-45" : "hover:bg-sun-pale",
                   )}
                 >

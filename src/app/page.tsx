@@ -426,7 +426,7 @@ export default function Home() {
                   const pawnOpen = openPawnSeat === i;
                   return (
                     <div key={i} className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="grid grid-cols-[auto_1fr] items-center gap-2 sm:flex sm:flex-nowrap">
                         <button
                           type="button"
                           onClick={() => setOpenPawnSeat(pawnOpen ? null : i)}
@@ -439,7 +439,7 @@ export default function Home() {
                           <PawnAvatar index={seatTokens[i]} color={PLAYER_COLORS[i]} size={40} />
                         </button>
                         <input
-                          className="field min-w-[120px] flex-1 text-sm"
+                          className="field min-w-0 flex-1 text-sm"
                           placeholder={isBot ? `Bot ${i}` : `Nama pemain ${i + 1}`}
                           value={names[i] ?? ""}
                           maxLength={20}
@@ -449,26 +449,28 @@ export default function Home() {
                             setNames(next);
                           }}
                         />
-                        <select
-                          aria-label={`Karakter pemain ${i + 1}`}
-                          value={seatChars[i]}
-                          onChange={(e) => {
-                            const next = [...seatChars];
-                            next[i] = e.target.value as CharacterId | "random";
-                            setSeatChars(next);
-                          }}
-                          className="rounded-full border-[2.5px] border-ink bg-white px-2.5 py-1.5 text-xs font-bold text-ink"
-                        >
-                          <option value="random">🎲 Acak</option>
-                          {CHARACTERS.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                        <Chip color={isBot ? "#DFE6FF" : "#D5F7E8"}>
-                          {isBot ? "Bot AI" : "Manusia"}
-                        </Chip>
+                        <div className="col-span-2 flex items-center justify-between gap-2 sm:col-span-1 sm:justify-start">
+                          <select
+                            aria-label={`Karakter pemain ${i + 1}`}
+                            value={seatChars[i]}
+                            onChange={(e) => {
+                              const next = [...seatChars];
+                              next[i] = e.target.value as CharacterId | "random";
+                              setSeatChars(next);
+                            }}
+                            className="flex-1 rounded-full border-[2.5px] border-ink bg-white px-2.5 py-1.5 text-xs font-bold text-ink sm:flex-none"
+                          >
+                            <option value="random">🎲 Acak</option>
+                            {CHARACTERS.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                          <Chip color={isBot ? "#DFE6FF" : "#D5F7E8"}>
+                            {isBot ? "Bot AI" : "Manusia"}
+                          </Chip>
+                        </div>
                       </div>
 
                       {pawnOpen ? (
@@ -589,7 +591,7 @@ export default function Home() {
                   <div className="space-y-3 border-t-2 border-ink/15 p-3.5 text-xs">
                     <div>
                       <div className="mb-1.5 font-bold text-ink-soft">Modal awal pemain</div>
-                      <div className="grid grid-cols-4 gap-1.5">
+                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                         {[1000, 1500, 2000, 3000].map((v) => (
                           <button
                             key={v}
@@ -608,7 +610,7 @@ export default function Home() {
 
                     <div>
                       <div className="mb-1.5 font-bold text-ink-soft">Batas ronde maksimal</div>
-                      <div className="grid grid-cols-4 gap-1.5">
+                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                         {[12, 17, 25, 40].map((r) => (
                           <button
                             key={r}

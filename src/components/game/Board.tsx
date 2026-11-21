@@ -111,15 +111,24 @@ const PIP_COORDS: Record<number, Array<[number, number]>> = {
   ],
 };
 
-function DiceFace({ value, animate }: { value: number | null; animate: boolean }) {
+function DiceFace({
+  value,
+  animate,
+  sizeClass,
+}: {
+  value: number | null;
+  animate: boolean;
+  sizeClass?: string;
+}) {
   const pips = value ? PIP_COORDS[value] ?? [] : [];
   return (
     <div
       className={cn(
-        "relative flex items-center justify-center rounded-[14px] border-[2.5px] border-ink bg-white transition-transform",
+        "relative flex items-center justify-center rounded-[11px] sm:rounded-[14px] border-[2px] sm:border-[2.5px] border-ink bg-white transition-transform",
         animate ? "animate-[dice-bounce_0.5s_var(--ease-out-soft)]" : "",
+        sizeClass,
       )}
-      style={{ width: "3.45em", height: "3.45em" }}
+      style={sizeClass ? undefined : { width: "3.45em", height: "3.45em" }}
     >
       {value ? (
         <svg viewBox="0 0 100 100" className="h-full w-full rounded-[11px]">
@@ -283,10 +292,10 @@ export function Board({
 
   return (
     <div
-      className="relative mx-auto aspect-square w-full max-w-[min(100%,calc(100dvh-5.75rem))] rounded-[28px] border-[3px] border-ink bg-ink p-[3px]"
-      style={{ containerType: "inline-size", fontSize: "clamp(6.5px, 1.02cqw, 11.5px)" }}
+      className="relative mx-auto aspect-square w-full max-w-[min(100%,calc(100dvh-5.75rem))] rounded-[18px] sm:rounded-[28px] border-[2px] sm:border-[3px] border-ink bg-ink p-[2px] sm:p-[3px]"
+      style={{ containerType: "inline-size", fontSize: "clamp(5.2px, 1.04cqw, 11.5px)" }}
     >
-      <div className="grid h-full w-full grid-cols-[1.28fr_repeat(9,minmax(0,1fr))_1.28fr] grid-rows-[1.28fr_repeat(9,minmax(0,1fr))_1.28fr] gap-[2px] overflow-hidden rounded-[23px] bg-ink">
+      <div className="grid h-full w-full grid-cols-[1.28fr_repeat(9,minmax(0,1fr))_1.28fr] grid-rows-[1.28fr_repeat(9,minmax(0,1fr))_1.28fr] gap-[1px] sm:gap-[2px] overflow-hidden rounded-[15px] sm:rounded-[23px] bg-ink">
         {TILES.map((tile) => {
           const { col, row } = cellOf(tile.id);
           const st = state.tiles[tile.id];
@@ -331,10 +340,10 @@ export function Board({
             >
               {tile.group ? (
                 <div
-                  className="relative flex h-[22%] w-full shrink-0 items-center justify-between border-b-[2px] border-ink px-[3px]"
+                  className="relative flex h-[20%] sm:h-[22%] w-full shrink-0 items-center justify-between border-b-[1.5px] sm:border-b-[2px] border-ink px-[2px] sm:px-[3px]"
                   style={{ background: GROUP_COLORS[tile.group] }}
                 >
-                  <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-white/45" />
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] sm:h-[2px] bg-white/45" />
                   {st.houses > 0 ? <BuildingBadge houses={st.houses} /> : <span />}
                   {isMonopoly ? (
                     <span
@@ -347,7 +356,14 @@ export function Board({
                   ) : null}
                 </div>
               ) : isCorner ? (
-                <div className="flex w-full shrink-0 items-center justify-between px-[4px] pt-[3px]">
+                <div
+                  className={cn(
+                    "w-full shrink-0 items-center justify-between px-[3px] pt-[2px]",
+                    tile.id === 20 && state.settings.freeParkingPot && (state.freeParkingPot ?? 0) > 0
+                      ? "flex"
+                      : "hidden sm:flex",
+                  )}
+                >
                   <span
                     className={cn(
                       "rounded-full border border-ink px-1.5 py-[0.5px] font-display font-extrabold leading-tight",
@@ -380,7 +396,11 @@ export function Board({
                     tileId={tile.id}
                     className={cn(
                       "transition-transform duration-200 group-hover:scale-110",
-                      isCorner ? "h-[3.15em] w-[3.15em]" : tile.group ? "h-[2.3em] w-[2.3em]" : "h-[2.65em] w-[2.65em]",
+                      isCorner
+                        ? "h-[2.6em] w-[2.6em] sm:h-[3.15em] sm:w-[3.15em]"
+                        : tile.group
+                          ? "h-[2.05em] w-[2.05em] sm:h-[2.3em] sm:w-[2.3em]"
+                          : "h-[2.35em] w-[2.35em] sm:h-[2.65em] sm:w-[2.65em]",
                     )}
                   />
                 </div>
@@ -390,7 +410,7 @@ export function Board({
                   </div>
                   {tile.price ? (
                     <div
-                      className="money mx-auto inline-block rounded-full bg-ink/[0.07] px-1 py-[0.5px] font-semibold text-ink-soft"
+                      className="money mx-auto hidden sm:inline-block rounded-full bg-ink/[0.07] px-1 py-[0.5px] font-semibold text-ink-soft"
                       style={{ fontSize: "0.64em" }}
                     >
                       {tile.price}
@@ -448,7 +468,7 @@ export function Board({
 
               {owner ? (
                 <div
-                  className="h-[10%] w-full shrink-0 border-t-[2px] border-ink"
+                  className="h-[10%] w-full shrink-0 border-t-[1.5px] sm:border-t-[2px] border-ink"
                   style={{ background: owner.color }}
                   title={`Milik ${owner.name}`}
                 />
@@ -500,6 +520,120 @@ export function Board({
             </div>
           ) : null}
 
+          {/* Mobile-Native Readable Center Stage */}
+          <div
+            className="relative z-10 flex flex-1 flex-col justify-between gap-1.5 sm:hidden"
+            style={{ fontSize: "12px" }}
+          >
+            <div className="flex items-center justify-between gap-1">
+              <span className="font-display text-[12px] font-extrabold leading-none tracking-tight text-ink">
+                Serenity<span className="text-tomato">Poly</span>
+              </span>
+              <span className="rounded-full border-[1.5px] border-ink bg-sun px-2 py-0.5 font-mono text-[10px] font-extrabold leading-none text-ink">
+                R{state.round} · {waveBadgeText}
+              </span>
+            </div>
+
+            <div
+              onClick={() => {
+                if (canRoll && onRoll) onRoll();
+              }}
+              role={canRoll && onRoll ? "button" : undefined}
+              tabIndex={canRoll && onRoll ? 0 : undefined}
+              className={cn(
+                "flex flex-1 flex-col items-center justify-center gap-1.5 rounded-[14px] border-[2px] border-ink bg-blue-pale px-2 py-1.5",
+                canRoll && onRoll && "cursor-pointer active:scale-[0.98]",
+              )}
+            >
+              {current ? (
+                <span className="inline-flex max-w-full items-center gap-1 rounded-full border-[1.5px] border-ink bg-white px-2 py-0.5 text-[10px] font-bold text-ink">
+                  <PawnAvatar
+                    index={current.tokenIndex ?? currentIdx}
+                    color={current.color}
+                    size={14}
+                    className="border p-0"
+                  />
+                  <span className="truncate">{current.name}</span>
+                  {state.doubles > 0 ? <span className="shrink-0 text-tomato">· Dobel {state.doubles}×</span> : null}
+                </span>
+              ) : null}
+
+              <div key={`m-${rollKey}`} className="flex items-center justify-center gap-2.5">
+                {[0, 1].map((i) => (
+                  <DiceFace
+                    key={i}
+                    value={displayDice ? displayDice[i] : null}
+                    animate={Boolean(displayDice && rollKey > 0)}
+                    sizeClass="h-9 w-9"
+                  />
+                ))}
+              </div>
+
+              <div
+                className={cn(
+                  "w-full rounded-full border-[1.5px] border-ink px-2 py-1 text-center text-[10px] font-extrabold leading-tight",
+                  canRoll && onRoll ? "bg-tomato text-white" : "bg-white text-ink",
+                )}
+              >
+                {canRoll && onRoll
+                  ? "🎲 Ketuk dadu untuk lempar!"
+                  : displayDice
+                    ? `Total ${displayDice[0] + displayDice[1]} · ${TILES[currentPos].short}`
+                    : state.phase === "auction"
+                      ? "🔨 Lelang berlangsung"
+                      : `Posisi: ${TILES[currentPos].short}`}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  spotlightTile.type === "property" ||
+                  spotlightTile.type === "transport" ||
+                  spotlightTile.type === "utility"
+                ) {
+                  onSelect(spotlightTile.id);
+                }
+              }}
+              className="flex items-center gap-2 rounded-[12px] border-[2px] border-ink bg-white px-2 py-1 text-left"
+            >
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-[1.5px] border-ink p-0.5"
+                style={{
+                  background: spotlightTile.group ? GROUP_COLORS[spotlightTile.group] : tileSurface(spotlightTile),
+                }}
+              >
+                <TileArtwork tileId={spotlightTile.id} className="h-full w-full" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-display text-[11px] font-extrabold leading-tight text-ink">
+                  {spotlightTile.name}
+                </div>
+                <div className="truncate text-[9.5px] font-semibold text-ink-soft">
+                  {spotlightOwner
+                    ? `Milik ${spotlightOwner.name}`
+                    : spotlightTile.price
+                      ? `Beli ${rp(spotlightTile.price)}`
+                      : specialTileSummary(spotlightTile)}
+                </div>
+              </div>
+            </button>
+
+            <div className="truncate rounded-full border-[1.5px] border-ink bg-white px-2.5 py-1 text-[10px] font-semibold text-ink-soft">
+              {lastLog ? (
+                <>
+                  <span className="mr-1 font-mono font-bold text-ink">R{lastLog.round}</span>
+                  {lastLog.text}
+                </>
+              ) : (
+                "Permainan siap dimulai."
+              )}
+            </div>
+          </div>
+
+          {/* Desktop & Tablet Rich 9x9 Bento */}
+          <div className="hidden min-h-0 flex-1 flex-col gap-[1.6%] sm:flex">
           {/* Header Row */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -937,6 +1071,7 @@ export function Board({
                 ))}
             </div>
           ) : null}
+          </div>
         </div>
       </div>
 

@@ -31,7 +31,7 @@ import { Button, Chip, Modal, Tooltip } from "@/components/ui/kit";
 import { cn, rp } from "@/lib/format";
 import { initMute, isMuted, setMuted, sfx, stopBgm } from "@/lib/sfx";
 
-export type PanelKind = "bank" | "shop" | "trade" | "portfolio" | "mission" | "rules" | "property" | "result" | null;
+export type PanelKind = "bank" | "shop" | "trade" | "portfolio" | "mission" | "rules" | "property" | "result" | "log" | null;
 
 export function GameScreen({
   settings,
@@ -235,7 +235,7 @@ export function GameScreen({
   }, [panel, inspectId, gateOpen, state.phase, state.offer, canAct, act]);
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-[1600px] flex-col gap-3 px-3 py-2.5 md:px-5">
+    <div className="mx-auto flex min-h-dvh w-full max-w-[1600px] flex-col gap-2 px-2.5 pt-2 pb-[132px] sm:px-3 md:px-5 lg:gap-3 lg:py-2.5 lg:pb-3">
       <ConfettiBurst triggerKey={confettiKey} />
       <CardRevealOverlay
         card={state.lastCard}
@@ -244,8 +244,63 @@ export function GameScreen({
         round={state.round}
       />
       <EventBreakingBanner event={state.event} round={state.round} />
-      {/* Top Navbar */}
-      <header className="flex flex-wrap items-center gap-2">
+
+      {/* Mobile Compact Single-Row Header (< lg) */}
+      <header className="flex items-center justify-between gap-1.5 lg:hidden">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onExit}
+            aria-label="Kembali ke menu"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-ink bg-white text-xs font-extrabold text-ink active:scale-95"
+          >
+            ←
+          </button>
+          <span className="font-display truncate text-[15px] font-extrabold tracking-tight text-ink">
+            Serenity<span className="text-tomato">Poly</span>
+          </span>
+          <span className="shrink-0 rounded-full border-2 border-ink bg-sun px-2 py-0.5 font-mono text-[10.5px] font-extrabold text-ink">
+            R{state.round}/{state.settings.maxRounds}
+          </span>
+          {settings.turnTimer ? (
+            <span
+              className={cn(
+                "shrink-0 rounded-full border-2 border-ink px-1.5 py-0.5 font-mono text-[10px] font-extrabold",
+                timer <= 5 ? "bg-tomato text-white" : "bg-tint text-ink",
+              )}
+            >
+              ⏱{Math.max(0, timer)}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {state.players.some((p) => p.isBot) ? (
+            <button
+              type="button"
+              onClick={() => {
+                sfx.click();
+                setBotSpeed((v) => (v === 1 ? 2 : v === 2 ? 3 : 1));
+              }}
+              className="rounded-full border-2 border-ink bg-white px-2 py-1 font-mono text-[11px] font-bold text-ink"
+              title="Kecepatan Bot"
+            >
+              ⏩{botSpeed}×
+            </button>
+          ) : null}
+          <AudioMixerButton />
+          <button
+            type="button"
+            onClick={() => openShared("rules")}
+            aria-label="Buku aturan"
+            className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink bg-white text-xs"
+          >
+            📖
+          </button>
+        </div>
+      </header>
+
+      {/* Desktop Top Navbar (lg+) */}
+      <header className="hidden lg:flex lg:flex-wrap lg:items-center lg:gap-2">
         <div className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-xl border-2 border-ink bg-sun text-sm">
             🎲
@@ -328,7 +383,7 @@ export function GameScreen({
         </div>
       </header>
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+      <div className="flex flex-col gap-2.5 lg:flex-row lg:items-start lg:gap-3">
         <aside className="lg:w-[236px] lg:shrink-0">
           <PlayerRail state={state} onInspect={setInspectId} />
         </aside>
@@ -344,15 +399,13 @@ export function GameScreen({
               setPanel("property");
             }}
           />
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 lg:hidden">
-            <Chip color="#FFF4C7">Cash {rp(me?.cash ?? 0)}</Chip>
-            <Chip>{me?.name}</Chip>
-          </div>
         </main>
 
         <aside className="flex w-full flex-col gap-3 lg:w-[340px] lg:shrink-0">
-          <TurnCard state={state} />
-          <ActionPanel state={state} act={act} canAct={!!canAct} onOpen={openShared} setSelectedTile={setSelectedTile} />
+          <div className="hidden space-y-3 lg:block">
+            <TurnCard state={state} />
+            <ActionPanel state={state} act={act} canAct={!!canAct} onOpen={openShared} setSelectedTile={setSelectedTile} />
+          </div>
           <RentBreakdown state={state} />
           {settings.mode !== "hotseat" ? <MissionCard state={state} seat={state.turnIndex} /> : null}
           <div className="hidden lg:block">
@@ -362,6 +415,169 @@ export function GameScreen({
           </div>
         </aside>
       </div>
+
+      {/* Mobile Fixed Sticky Bottom Action Dock */}
+      {state.phase !== "game_over" && me ? (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t-[2.5px] border-ink bg-white/95 px-2.5 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur-sm lg:hidden">
+          <div className="mx-auto max-w-lg space-y-1.5">
+            {state.auction ? (
+              <div className="rounded-full border-2 border-ink bg-sun-pale px-3 py-2 text-center text-xs font-extrabold text-ink">
+                🔨 Lelang berlangsung — tunggu semua penawar
+              </div>
+            ) : state.offer && canAct ? (
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="primary"
+                  className="min-h-0 flex-1 py-2.5 text-xs"
+                  disabled={me.cash < state.offer.price}
+                  onClick={() => act({ type: "BUY" })}
+                >
+                  Beli {TILES[state.offer.tile].short} ({rp(state.offer.price)})
+                </Button>
+                <Button
+                  className="min-h-0 px-3 py-2.5 text-xs"
+                  onClick={() => act({ type: "DECLINE" })}
+                >
+                  Lelang
+                </Button>
+                <Button
+                  className="min-h-0 px-2.5 py-2.5 text-xs"
+                  onClick={() => {
+                    setSelectedTile(state.offer!.tile);
+                    setPanel("property");
+                  }}
+                >
+                  ℹ️
+                </Button>
+              </div>
+            ) : state.phase === "jail" && canAct ? (
+              <div className="flex items-center gap-1.5">
+                <Button variant="primary" className="min-h-0 flex-1 py-2.5 text-xs" onClick={() => act({ type: "ROLL" })}>
+                  🎲 Lempar Dobel
+                </Button>
+                <Button
+                  className="min-h-0 px-3 py-2.5 text-xs"
+                  disabled={me.cash < (me.character === "bandar" ? 100 : 50)}
+                  onClick={() => act({ type: "PAY_JAIL" })}
+                >
+                  Bayar {rp(me.character === "bandar" ? 100 : 50)}
+                </Button>
+                {me.jailCards > 0 ? (
+                  <Button variant="mint" className="min-h-0 px-2.5 py-2.5 text-xs" onClick={() => act({ type: "USE_JAIL_CARD" })}>
+                    🎟️
+                  </Button>
+                ) : null}
+              </div>
+            ) : state.phase === "await_roll" ? (
+              canAct ? (
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="primary"
+                    className="min-h-0 flex-1 py-2.5 text-sm"
+                    onClick={() => act({ type: "ROLL" })}
+                  >
+                    🎲 Lempar Dadu
+                  </Button>
+                  {features(state).golden && !me.goldenUsed ? (
+                    <Button
+                      variant="sun"
+                      className="min-h-0 px-3 py-2.5 text-xs"
+                      onClick={() => act({ type: "DECLARE_GOLDEN" })}
+                      title="Aktifkan Giliran Emas"
+                    >
+                      ⚡ Emas
+                    </Button>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="rounded-full border-2 border-ink bg-tint px-3 py-2 text-center text-xs font-bold text-ink-soft">
+                  🤖 {me.name} sedang bermain…
+                </div>
+              )
+            ) : canAct ? (
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="primary"
+                  className="min-h-0 flex-1 py-2.5 text-sm"
+                  onClick={() => act({ type: "END_TURN" })}
+                >
+                  Akhiri Giliran →
+                </Button>
+                {me.properties.length > 0 ? (
+                  <Button
+                    variant="sun"
+                    className="min-h-0 px-3 py-2.5 text-xs"
+                    onClick={() => openShared("portfolio")}
+                  >
+                    🏠 Bangun
+                  </Button>
+                ) : null}
+              </div>
+            ) : (
+              <div className="rounded-full border-2 border-ink bg-tint px-3 py-2 text-center text-xs font-bold text-ink-soft">
+                🤖 {me.name} menyelesaikan giliran…
+              </div>
+            )}
+
+            <div className={cn("grid gap-1", features(state).shop ? "grid-cols-6" : "grid-cols-5")}>
+              <button
+                type="button"
+                onClick={() => openShared("portfolio")}
+                className="flex flex-col items-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
+              >
+                <span>🏘️</span>
+                <span>Aset</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => openShared("bank")}
+                className="flex flex-col items-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
+              >
+                <span>🏦</span>
+                <span>Bank</span>
+              </button>
+              <button
+                type="button"
+                disabled={!canAct}
+                onClick={() => openShared("trade")}
+                className={cn(
+                  "flex flex-col items-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95",
+                  !canAct && "opacity-45",
+                )}
+              >
+                <span>🤝</span>
+                <span>Dagang</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => openShared("mission")}
+                className="flex flex-col items-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
+              >
+                <span>🎯</span>
+                <span>Misi</span>
+              </button>
+              {features(state).shop ? (
+                <button
+                  type="button"
+                  onClick={() => openShared("shop")}
+                  className="flex flex-col items-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
+                >
+                  <span>🛒</span>
+                  <span>Toko</span>
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => openShared("log")}
+                className="flex flex-col items-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
+              >
+                <span>📜</span>
+                <span>Log</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {gateOpen && me ? <PassGate name={me.name} onContinue={() => setGateOpen(false)} /> : null}
       {state.auction ? (
@@ -402,6 +618,40 @@ export function GameScreen({
             onSelectTile={(id) => setSelectedTile(id)}
           />
         ) : null}
+      </Modal>
+      <Modal
+        open={panel === "log"}
+        onClose={() => setPanel(null)}
+        title="Riwayat Aktivitas"
+        width="max-w-md"
+      >
+        <div className="divide-y divide-divider">
+          {state.log
+            .slice(-50)
+            .slice()
+            .reverse()
+            .map((entry) => (
+              <div key={entry.id} className="flex items-start gap-2 py-2 text-xs">
+                <span className="shrink-0 rounded-full border border-ink bg-tint px-2 py-0.5 font-mono text-[10px] font-bold">
+                  R{entry.round}
+                </span>
+                <span
+                  className={cn(
+                    "flex-1 leading-snug",
+                    entry.tone === "warn"
+                      ? "font-semibold text-tomato"
+                      : entry.tone === "money"
+                        ? "font-semibold text-[#0e8a5a]"
+                        : entry.tone === "good"
+                          ? "font-bold text-ink"
+                          : "text-ink-soft",
+                  )}
+                >
+                  {entry.text}
+                </span>
+              </div>
+            ))}
+        </div>
       </Modal>
       {state.phase === "game_over" || panel === "result" ? (
         <ResultDialog state={state} onRestart={restart} onExit={onExit} />

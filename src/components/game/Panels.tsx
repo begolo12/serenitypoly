@@ -59,10 +59,67 @@ export function useCashDeltas(state: GameState | null) {
 export function PlayerRail({ state, onInspect }: { state: GameState; onInspect: (id: string) => void }) {
   const cur = current(state);
   const deltas = useCashDeltas(state);
+  const mobileCols =
+    state.players.length <= 2
+      ? "grid-cols-2"
+      : state.players.length === 3
+        ? "grid-cols-3"
+        : "grid-cols-4";
 
   return (
-    <div className="flex gap-2.5 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
-      {state.players.map((p, idx) => {
+    <>
+      {/* Mobile Compact 1-Row Grid */}
+      <div className={cn("grid gap-1.5 lg:hidden", mobileCols)}>
+        {state.players.map((p, idx) => {
+          const active = cur?.id === p.id && state.phase !== "game_over";
+          const delta = deltas[p.id];
+          return (
+            <button
+              key={p.id}
+              onClick={() => onInspect(p.id)}
+              className={cn(
+                "relative min-w-0 rounded-[14px] border-[2px] border-ink p-1.5 text-left transition-colors",
+                active ? "bg-sun-pale ring-1 ring-ink" : "bg-white hover:bg-tint",
+                p.bankrupt && "opacity-40 grayscale",
+              )}
+            >
+              {delta ? (
+                <span
+                  key={delta.seq}
+                  className={cn(
+                    "pointer-events-none absolute -top-2.5 right-1 z-20 rounded-full border-[1.5px] border-ink px-1.5 py-[1px] font-mono text-[9.5px] font-extrabold animate-[float-delta_1.35s_ease-out_forwards]",
+                    delta.amount > 0 ? "bg-mint text-ink" : "bg-tomato text-white",
+                  )}
+                >
+                  {delta.amount > 0 ? `+${rp(delta.amount)}` : `−${rp(Math.abs(delta.amount))}`}
+                </span>
+              ) : null}
+
+              <div className="flex items-center justify-between gap-1">
+                <PawnAvatar index={p.tokenIndex ?? idx} color={p.color} size={22} className="border-[1.5px] p-0" />
+                {p.inJail ? (
+                  <span className="text-[10px]" title="Di penjara">🚔</span>
+                ) : active ? (
+                  <span className="h-2 w-2 shrink-0 rounded-full border border-ink bg-mint animate-[pulse-mint_1.5s_ease-out_infinite]" />
+                ) : null}
+              </div>
+              <div className="mt-1 truncate font-display text-[11px] font-extrabold leading-tight text-ink">
+                {p.name}
+              </div>
+              <div className="money truncate text-[11px] font-extrabold leading-tight text-[#0e8a5a]">
+                {rp(p.cash)}
+              </div>
+              <div className="truncate text-[9px] font-semibold text-ink-soft">
+                {p.properties.length} kota
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Desktop Full Vertical Rail */}
+      <div className="hidden lg:flex lg:flex-col lg:gap-2.5">
+        {state.players.map((p, idx) => {
         const groups = ownedGroupCount(state, p.id);
         const active = cur?.id === p.id && state.phase !== "game_over";
         const delta = deltas[p.id];
@@ -173,7 +230,8 @@ export function PlayerRail({ state, onInspect }: { state: GameState; onInspect: 
           </Tooltip>
         );
       })}
-    </div>
+      </div>
+    </>
   );
 }
 

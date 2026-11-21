@@ -594,7 +594,7 @@ export function BoardPawn({
         bankrupt && "opacity-35 grayscale",
         (active || hopping) && "animate-[pawn-bounce_0.85s_ease-in-out_infinite]",
       )}
-      style={{ width: "clamp(22px, 3.1cqw, 38px)", height: "clamp(22px, 3.1cqw, 38px)" }}
+      style={{ width: "clamp(19px, 4.6cqw, 38px)", height: "clamp(19px, 4.6cqw, 38px)" }}
       title={name}
     >
       {active ? (
@@ -606,8 +606,7 @@ export function BoardPawn({
       <PawnToken index={index} color={color} className="h-full w-full drop-shadow-sm" />
       {active ? (
         <span
-          className="pointer-events-none absolute -top-[1.15em] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border-[1.5px] border-ink bg-ink px-1.5 py-[1px] font-bold leading-none text-sun"
-          style={{ fontSize: "0.72em" }}
+          className="pointer-events-none absolute -top-[1.15em] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border-[1.5px] border-ink bg-ink px-1.5 py-[1px] font-bold leading-none text-sun text-[9px] sm:text-[0.72em]"
         >
           {name}
         </span>

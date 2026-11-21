@@ -60,7 +60,7 @@ export function CardRevealOverlay({
   const isChance = visibleCard.deck === "chance";
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-16 z-40 flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 top-13 z-40 flex justify-center px-4 sm:top-16">
       <div
         onClick={() => setVisibleCard(null)}
         className={cn(
@@ -130,7 +130,7 @@ export function EventBreakingBanner({
   if (!banner) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[4.25rem] z-[35] flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 top-[3.35rem] z-[35] flex justify-center px-4 sm:top-[4.25rem]">
       <div
         onClick={() => setBanner(null)}
         className="pointer-events-auto flex max-w-[420px] cursor-pointer items-center gap-3 rounded-full border-[2.5px] border-ink bg-ink px-4 py-2 text-white animate-[banner-drop_0.3s_var(--ease-out-soft)]"
@@ -307,7 +307,7 @@ export function AudioMixerButton() {
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-64 rounded-[22px] border-[2.5px] border-ink bg-white p-3.5 animate-[pop_0.16s_var(--ease-out-soft)]">
+        <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-64 max-w-[calc(100vw-1.25rem)] rounded-[22px] border-[2.5px] border-ink bg-white p-3.5 animate-[pop_0.16s_var(--ease-out-soft)]">
           <div className="mb-2.5 flex items-center justify-between">
             <span className="font-display text-sm font-bold text-ink">Mixer Audio</span>
             <button

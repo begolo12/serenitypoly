@@ -74,7 +74,7 @@ export function Tooltip({
       <span
         role="tooltip"
         className={cn(
-          "pointer-events-none absolute z-[80] w-max max-w-[230px] rounded-xl border-2 border-ink bg-ink px-2.5 py-1.5 text-center text-[11px] font-semibold leading-snug text-white opacity-0 scale-95 transition-all duration-150 ease-out group-hover/tip:opacity-100 group-hover/tip:scale-100 group-focus-within/tip:opacity-100 group-focus-within/tip:scale-100",
+          "pointer-events-none absolute z-[80] hidden w-max max-w-[230px] rounded-xl border-2 border-ink bg-ink px-2.5 py-1.5 text-center text-[11px] font-semibold leading-snug text-white opacity-0 scale-95 transition-all duration-150 ease-out sm:block group-hover/tip:opacity-100 group-hover/tip:scale-100 group-focus-within/tip:opacity-100 group-focus-within/tip:scale-100",
           posCls,
         )}
       >
@@ -123,21 +123,21 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
       >
-        <header className="flex items-center justify-between gap-3 border-b-[2.5px] border-ink bg-sun px-5 py-3.5">
-          <h2 className="font-display text-lg font-extrabold tracking-tight">{title}</h2>
+        <header className="flex items-center justify-between gap-3 border-b-[2.5px] border-ink bg-sun px-4 py-3 sm:px-5 sm:py-3.5">
+          <h2 className="font-display text-base font-extrabold tracking-tight sm:text-lg">{title}</h2>
           {dismissable ? (
             <button
               onClick={onClose}
               aria-label="Tutup"
-              className="flex h-9 w-9 items-center justify-center rounded-full border-[2.5px] border-ink bg-white text-base font-bold transition-transform hover:scale-105 active:scale-95"
+              className="flex h-8 w-8 items-center justify-center rounded-full border-[2.5px] border-ink bg-white text-sm font-bold transition-transform hover:scale-105 active:scale-95 sm:h-9 sm:w-9 sm:text-base"
             >
               ✕
             </button>
           ) : null}
         </header>
-        <div className="scroll-thin max-h-[70dvh] overflow-y-auto px-5 py-4">{children}</div>
+        <div className="scroll-thin max-h-[72dvh] overflow-y-auto px-4 py-3.5 sm:max-h-[70dvh] sm:px-5 sm:py-4">{children}</div>
         {footer ? (
-          <footer className="border-t-[2.5px] border-ink bg-tint px-5 py-3">{footer}</footer>
+          <footer className="border-t-[2.5px] border-ink bg-tint px-4 py-2.5 sm:px-5 sm:py-3">{footer}</footer>
         ) : null}
       </div>
     </div>
