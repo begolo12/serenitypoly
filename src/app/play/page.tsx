@@ -34,7 +34,12 @@ export default function PlayPage() {
         if (st?.engineVersion && Array.isArray(st.players) && st.players.length >= 2) {
           setCfg({
             settings: st.settings,
-            seats: st.players.map((p) => ({ name: p.name, isBot: p.isBot })),
+            seats: st.players.map((p) => ({
+              name: p.name,
+              isBot: p.isBot,
+              character: p.character,
+              tokenIndex: p.tokenIndex,
+            })),
             initial: st,
           });
           return;

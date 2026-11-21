@@ -167,7 +167,7 @@ export function rentFor(
   const dividends: Array<{ playerId: string; amount: number }> = [];
   if (tile.type === "property" && tile.group) {
     const holders = s.players.filter(
-      (p) => !p.bankrupt && p.id !== owner.id && p.shares.includes(tile.group!),
+      (p) => !p.bankrupt && p.id !== owner.id && p.id !== payer.id && p.shares.includes(tile.group!),
     );
     const per = Math.min(Math.floor((value * 0.1) / 10) * 10, 150);
     if (per > 0 && value > 0) {
@@ -186,7 +186,7 @@ export function rentFor(
   }
 
   let final = Math.max(10, Math.floor((value - shareCut + characterAdj) / 10) * 10);
-  if (payer.goldenActive || owner.goldenActive) {
+  if (owner.goldenActive) {
     final *= 2;
     notes.push("Giliran Emas ×2");
   }
@@ -210,8 +210,27 @@ function pushLog(s: GameState, text: string, tone: "info" | "money" | "warn" | "
   if (s.log.length > 120) s.log.splice(0, s.log.length - 120);
 }
 
-function addEffect(s: GameState, effect: Omit<Effect, "id">) {
-  s.effects.push({ ...effect, id: `e${s.effects.length}-${s.nextLogId}` });
+function addEffect(s: GameState, effect: Omit<Effect, "id">, source: "event" | "card" = "event") {
+  // Awalan id menandai sumber efek: sogok hanya boleh membatalkan efek peristiwa, bukan Promosi milik pemain.
+  s.effects.push({ ...effect, id: `${source === "event" ? "ev" : "card"}-${s.effects.length}-${s.nextLogId}` });
+}
+
+const isEventEffect = (e: Effect) => e.id.startsWith("ev-");
+
+const MAX_TRADE_PROPS = 40;
+
+export function isTileId(n: unknown): n is number {
+  return typeof n === "number" && Number.isInteger(n) && n >= 0 && n < TILES.length;
+}
+
+function validTradeProps(s: GameState, ids: number[], owner: Player): boolean {
+  if (!Array.isArray(ids) || ids.length > MAX_TRADE_PROPS) return false;
+  if (new Set(ids).size !== ids.length) return false;
+  return ids.every((id) => isTileId(id) && s.tiles[id].owner === owner.id);
+}
+
+function validTradeCash(amount: number, limit: number): boolean {
+  return Number.isInteger(amount) && amount >= 0 && amount <= limit;
 }
 
 export function effectMult(s: GameState, kind: Effect["kind"]): number {
@@ -310,11 +329,14 @@ export function receive(s: GameState, p: Player, amount: number) {
 }
 
 export function bankrupt(s: GameState, p: Player, creditor: Player | null) {
+  const cashLeft = p.cash;
+  let buildingValue = 0;
   p.bankrupt = true;
   p.cash = 0;
   for (const id of p.properties) {
     const st = s.tiles[id];
     if (st.houses > 0) {
+      buildingValue += st.houses * Math.floor((TILES[id].houseCost ?? 0) / 2);
       if (st.houses === 5) s.hotelsBank += 1;
       else s.housesBank += st.houses;
       st.houses = 0;
@@ -326,13 +348,23 @@ export function bankrupt(s: GameState, p: Player, creditor: Player | null) {
       s.tiles[id].mortgaged = false;
     }
   }
+  const estate = cashLeft + buildingValue;
+  if (estate > 0) {
+    if (creditor && !creditor.bankrupt) creditor.cash += estate;
+    else if (s.settings.freeParkingPot) s.freeParkingPot = (s.freeParkingPot ?? 0) + estate;
+  }
   p.properties = [];
   p.shares = [];
   p.hand = [];
   p.loans = [];
+  p.jailCards = 0;
+  p.inJail = false;
+  p.jailTurns = 0;
+  p.goldenActive = false;
   s.offer = null;
   s.auction = null;
   s.trade = null;
+  if (s.phase === "auction") s.phase = s.pendingRoll ? "await_roll" : "post_roll";
   pushLog(
     s,
     creditor ? `${p.name} bangkrut. Semua aset pindah ke ${creditor.name}.` : `${p.name} bangkrut dan keluar dari permainan.`,
@@ -355,7 +387,7 @@ function endByScore(s: GameState) {
   const alive = living(s);
   const ranked = alive.slice().sort((a, b) => scoreOf(s, b) - scoreOf(s, a));
   s.phase = "game_over";
-  s.winner = ranked[0]?.id ?? null;
+  s.winner = ranked[0]?.id ?? s.players[0].id;
   pushLog(s, `Ronde ${s.settings.maxRounds} selesai. Pemenang: ${ranked[0]?.name ?? "-"}.`, "good");
 }
 
@@ -386,7 +418,7 @@ function moveTo(s: GameState, p: Player, target: number, collectGo = true) {
   s.lastMove = { playerId: p.id, from, to: p.position, steps };
 }
 
-function applyCard(s: GameState, p: Player, card: CardDef) {
+export function applyCard(s: GameState, p: Player, card: CardDef) {
   pushLog(s, `${p.name} menarik kartu: ${card.text}`);
   s.lastCard = {
     deck: card.deck,
@@ -405,8 +437,10 @@ function applyCard(s: GameState, p: Player, card: CardDef) {
       resolveTile(s, p);
       break;
     case "move_rel": {
-      const target = (p.position + (card.amount ?? 0) + 40) % 40;
-      moveTo(s, p, target);
+      const delta = card.amount ?? 0;
+      const target = (p.position + delta + 40) % 40;
+      // Kartu mundur tidak melewati GO, jadi tidak berhak gaji.
+      moveTo(s, p, target, delta > 0);
       resolveTile(s, p);
       break;
     }
@@ -446,6 +480,7 @@ function applyCard(s: GameState, p: Player, card: CardDef) {
 }
 
 function resolveTile(s: GameState, p: Player) {
+  if (p.bankrupt) return;
   const tile = TILES[p.position];
   s.lastRent = null;
 
@@ -540,6 +575,11 @@ function resolveTile(s: GameState, p: Player) {
 }
 
 export function startAuction(s: GameState, tileId: number, forced = false) {
+  if (hasEffect(s, "no_auction")) {
+    s.offer = null;
+    pushLog(s, `Lelang ${TILES[tileId]?.name ?? "petak"} dibatalkan (lelang tutup).`);
+    return;
+  }
   const active = living(s).map((p) => p.id);
   if (active.length < 2) {
     const only = active[0] ? playerOf(s, active[0]) : null;
@@ -591,6 +631,7 @@ function finishAuction(s: GameState) {
       winner.cash -= price;
       const previous = s.players.find((pl) => pl.id !== winner.id && pl.properties.includes(a.tile)) ?? null;
       assignTile(s, a.tile, winner.id);
+      s.tiles[a.tile].mortgaged = false;
       winner.stats.auctionsWon += 1;
       if (a.forced && previous) previous.cash += Math.round(price * 0.7);
       if (winner.character === "bandar") winner.cash += Math.round(price * 0.1);
@@ -604,6 +645,7 @@ function finishAuction(s: GameState) {
         const price = Math.floor((tile.price ?? 0) * 0.5);
         owner.cash += price;
         s.tiles[a.tile].owner = null;
+        s.tiles[a.tile].mortgaged = false;
         owner.properties = owner.properties.filter((id) => id !== a.tile);
         pushLog(s, `Bank membeli ${tile.name} dari ${owner.name} seharga Rp ${price}.`, "warn");
       }
@@ -661,6 +703,7 @@ function startRound(s: GameState) {
   s.round += 1;
   s.wave = features(s).waves ? waveFor(s.round) : 1;
   s.shopBought = false;
+  s.trade = null;
 
   for (const e of s.effects) e.roundsLeft -= 1;
   s.effects = s.effects.filter((e) => e.roundsLeft > 0);
@@ -681,6 +724,18 @@ function startRound(s: GameState) {
         ...(s.wave >= 3 ? ["ev_krisis"] : []),
       ] as string[]);
       applyEvent(s, ev);
+    }
+  }
+
+  // Jatuh tempo Krisis diproses sebelum bunga: pinjaman yang lunas ronde ini tidak boleh kena bunga lagi.
+  if (s.wave >= 4) {
+    for (const p of living(s)) {
+      const due = p.loans.reduce((a, l) => a + l.principal, 0);
+      if (due > 0) {
+        pay(s, p, due, null, "jatuh tempo pinjaman");
+        p.loans = [];
+        pushLog(s, `${p.name} melunasi pinjaman Rp ${due} (jatuh tempo Krisis).`, "warn");
+      }
     }
   }
 
@@ -716,21 +771,6 @@ function startRound(s: GameState) {
   }
 
   if (features(s).shop) s.shop = pickShop(s);
-
-  for (const p of living(s)) {
-    const loanCap = s.wave === 1 ? 500 : 800;
-    if (s.wave >= 4) {
-      const due = p.loans.reduce((a, l) => a + l.principal, 0);
-      if (due > 0) {
-        pay(s, p, due, null, "jatuh tempo pinjaman");
-        p.loans = [];
-        pushLog(s, `${p.name} melunasi pinjaman Rp ${due} (jatuh tempo Krisis).`, "warn");
-      }
-    }
-    if (p.loans.reduce((a, l) => a + l.principal, 0) > loanCap) {
-      p.loans = [];
-    }
-  }
 
   pushLog(s, `Ronde ${s.round} dimulai.`, "info");
   checkMission(s);
@@ -809,6 +849,8 @@ function endTurn(s: GameState) {
       return;
     }
     startRound(s);
+    // Bangkrut karena bunga/PBB di awal ronde tidak boleh ditimpa fase giliran.
+    if (s.phase === "game_over") return;
   }
 
   s.phase = s.players[idx].inJail ? "jail" : "await_roll";
@@ -818,10 +860,11 @@ function endTurn(s: GameState) {
 
 export function applyAction(prev: GameState, action: Action): GameState {
   const s: GameState = structuredClone(prev);
-  s.version += 1;
   const p = current(s);
 
   if (s.phase === "game_over" && action.type !== "DISMISS") return prev;
+  // Pemain bangkrut hanya boleh menutup giliran; selain itu aksi ditolak tanpa mengubah state.
+  if (p?.bankrupt && action.type !== "END_TURN" && action.type !== "SURRENDER") return prev;
 
   switch (action.type) {
     case "ROLL": {
@@ -886,6 +929,7 @@ export function applyAction(prev: GameState, action: Action): GameState {
       if (p.cash < price) break;
       p.cash -= price;
       assignTile(s, tile.id, p.id);
+      s.tiles[tile.id].mortgaged = false;
       pushLog(s, `${p.name} membeli ${tile.name} Rp ${price}.`, "money");
       s.offer = null;
       s.phase = s.pendingRoll ? "await_roll" : "post_roll";
@@ -893,8 +937,13 @@ export function applyAction(prev: GameState, action: Action): GameState {
       break;
     }
 
+    case "DISMISS":
     case "DECLINE": {
       if (!s.offer) break;
+      if (s.phase === "game_over") {
+        s.offer = null;
+        break;
+      }
       const tileId = s.offer.tile;
       if (s.settings.auction && !hasEffect(s, "no_auction")) {
         startAuction(s, tileId);
@@ -911,6 +960,7 @@ export function applyAction(prev: GameState, action: Action): GameState {
       if (!a) break;
       const actor = playerOf(s, a.current);
       if (!actor || actor.bankrupt) break;
+      if (!Number.isInteger(action.amount)) break;
       if (action.amount <= a.bid || action.amount > actor.cash) break;
       a.bid = Math.round(action.amount);
       a.leader = actor.id;
@@ -933,8 +983,9 @@ export function applyAction(prev: GameState, action: Action): GameState {
     }
 
     case "BUILD": {
+      if (!isTileId(action.tile)) break;
       const tile = TILES[action.tile];
-      if (!tile || tile.type !== "property" || s.tiles[tile.id].owner !== p.id) break;
+      if (tile.type !== "property" || s.tiles[tile.id].owner !== p.id) break;
       if (s.phase !== "post_roll") break;
       const st = s.tiles[tile.id];
       if (st.houses >= 5) break;
@@ -965,8 +1016,9 @@ export function applyAction(prev: GameState, action: Action): GameState {
     }
 
     case "SELL_HOUSE": {
+      if (!isTileId(action.tile)) break;
       const tile = TILES[action.tile];
-      if (!tile || s.tiles[tile.id].owner !== p.id) break;
+      if (s.tiles[tile.id].owner !== p.id) break;
       const st = s.tiles[tile.id];
       if (st.houses <= 0) break;
       const others = GROUP_TILES[tile.group!].filter((id) => id !== tile.id).map((id) => s.tiles[id].houses);
@@ -978,8 +1030,9 @@ export function applyAction(prev: GameState, action: Action): GameState {
     }
 
     case "MORTGAGE": {
+      if (!isTileId(action.tile)) break;
       const tile = TILES[action.tile];
-      if (!tile || s.tiles[tile.id].owner !== p.id) break;
+      if (s.tiles[tile.id].owner !== p.id) break;
       if (s.tiles[tile.id].houses > 0) break;
       if (s.tiles[tile.id].mortgaged) break;
       s.tiles[tile.id].mortgaged = true;
@@ -989,8 +1042,9 @@ export function applyAction(prev: GameState, action: Action): GameState {
     }
 
     case "UNMORTGAGE": {
+      if (!isTileId(action.tile)) break;
       const tile = TILES[action.tile];
-      if (!tile || s.tiles[tile.id].owner !== p.id) break;
+      if (s.tiles[tile.id].owner !== p.id) break;
       if (!s.tiles[tile.id].mortgaged) break;
       const cost = Math.ceil(((tile.price ?? 0) / 2) * 1.1);
       if (p.cash < cost) break;
@@ -1023,7 +1077,9 @@ export function applyAction(prev: GameState, action: Action): GameState {
     }
 
     case "BUY_SHARE": {
+      if (p.bankrupt) break;
       if (!features(s).shares || s.wave < 2) break;
+      if (!GROUP_TILES[action.group]) break;
       if (p.shares.includes(action.group)) break;
       const total = GROUP_TILES[action.group].reduce((a, id) => a + (TILES[id].price ?? 0), 0);
       const price = Math.round((total * 0.2) / 10) * 10;
@@ -1035,6 +1091,7 @@ export function applyAction(prev: GameState, action: Action): GameState {
     }
 
     case "SELL_SHARE": {
+      if (p.bankrupt) break;
       if (!p.shares.includes(action.group)) break;
       const total = GROUP_TILES[action.group].reduce((a, id) => a + (TILES[id].price ?? 0), 0);
       const value = Math.round((total * 0.2) / 2 / 10) * 10;
@@ -1045,7 +1102,9 @@ export function applyAction(prev: GameState, action: Action): GameState {
     }
 
     case "TAKE_LOAN": {
+      if (p.bankrupt) break;
       if (!features(s).loans) break;
+      if (!Number.isInteger(action.amount)) break;
       const cap = s.wave === 1 ? 500 : 800;
       const existing = p.loans.reduce((a, l) => a + l.principal, 0);
       const amount = Math.max(0, Math.min(action.amount, cap - existing));
@@ -1067,6 +1126,7 @@ export function applyAction(prev: GameState, action: Action): GameState {
     }
 
     case "BUY_SHOP": {
+      if (p.bankrupt) break;
       if (!features(s).shop || s.shopBought || hasEffect(s, "shop_closed")) break;
       const def = SHOP_CARDS.find((c) => c.id === action.card);
       if (!def || !s.shop.includes(def.id)) break;
@@ -1087,10 +1147,17 @@ export function applyAction(prev: GameState, action: Action): GameState {
       const def = SHOP_CARDS.find((c) => c.id === action.card);
       if (!def) break;
       if (def.kind === "promo") {
-        if (action.target === undefined || s.tiles[action.target].owner !== p.id) break;
-        addEffect(s, { kind: "rent_mult", mult: 3, roundsLeft: 1, label: "Promosi", tile: action.target });
+        if (action.target === undefined || !isTileId(action.target)) break;
+        const tile = TILES[action.target];
+        const st = s.tiles[action.target];
+        if (st.owner !== p.id || st.mortgaged || tile.type !== "property") break;
+        addEffect(
+          s,
+          { kind: "rent_mult", mult: 3, roundsLeft: 1, label: "Promosi", tile: action.target },
+          "card",
+        );
         p.hand.splice(idx, 1);
-        pushLog(s, `${p.name} memakai Promosi di ${TILES[action.target].name}.`, "good");
+        pushLog(s, `${p.name} memakai Promosi di ${tile.name}.`, "good");
       } else if (def.kind === "audit") {
         const target = s.players.find((x) => x.id !== p.id && !x.bankrupt && x.name === action.target?.toString());
         const t = target ?? living(s).filter((x) => x.id !== p.id).sort((a, b) => b.cash - a.cash)[0];
@@ -1101,7 +1168,8 @@ export function applyAction(prev: GameState, action: Action): GameState {
         p.hand.splice(idx, 1);
         pushLog(s, `${p.name} mengaudit ${t.name} dan menerima Rp ${amount}.`, "money");
       } else if (def.kind === "legalitas") {
-        if (action.target === undefined || s.tiles[action.target].owner !== p.id) break;
+        if (action.target === undefined || !isTileId(action.target)) break;
+        if (s.tiles[action.target].owner !== p.id) break;
         const tile = TILES[action.target];
         const st = s.tiles[action.target];
         if (st.houses >= 5) break;
@@ -1121,13 +1189,16 @@ export function applyAction(prev: GameState, action: Action): GameState {
         p.hand.splice(idx, 1);
         pushLog(s, `${p.name} memakai Legalitas Cepat di ${tile.name}.`, "good");
       } else if (def.kind === "sogok") {
-        const bad = s.effects.findIndex((e) => e.kind !== "rent_mult" || (e.mult ?? 1) > 1);
-        if (bad >= 0) s.effects.splice(bad, 1);
+        const bad = s.effects.findIndex(isEventEffect);
+        if (bad < 0) break;
+        s.effects.splice(bad, 1);
         p.hand.splice(idx, 1);
-        pushLog(s, `${p.name} menyogok untuk membatalkan satu efek.`, "good");
+        pushLog(s, `${p.name} menyogok untuk membatalkan satu efek peristiwa.`, "good");
       } else if (def.kind === "operasi") {
         const target = action.target;
-        if (target === undefined || !s.tiles[target].owner || s.tiles[target].houses > 0) break;
+        if (target === undefined || !isTileId(target)) break;
+        if (!s.tiles[target].owner || s.tiles[target].houses > 0) break;
+        if (hasEffect(s, "no_auction")) break;
         p.hand.splice(idx, 1);
         startAuction(s, target, true);
         pushLog(s, `${p.name} memicu Operasi Pasar pada ${TILES[target].name}.`, "warn");
@@ -1136,6 +1207,7 @@ export function applyAction(prev: GameState, action: Action): GameState {
     }
 
     case "DECLARE_GOLDEN": {
+      if (p.bankrupt) break;
       if (!features(s).golden || p.goldenUsed || p.goldenActive) break;
       if (s.phase !== "await_roll") break;
       p.goldenUsed = true;
@@ -1150,10 +1222,14 @@ export function applyAction(prev: GameState, action: Action): GameState {
       const sender = isCounter ? playerOf(s, action.offer.from) : p;
       if (!sender || sender.bankrupt) break;
       if (!isCounter && action.offer.from !== p.id) break;
-      if (action.offer.giveCash > sender.cash) break;
       const target = playerOf(s, action.offer.to);
       if (!target || target.bankrupt || target.id === sender.id) break;
-      if (action.offer.wantCash > target.cash) break;
+      if (!validTradeCash(action.offer.giveCash, sender.cash)) break;
+      if (!validTradeCash(action.offer.wantCash, target.cash)) break;
+      if (!validTradeProps(s, action.offer.giveProps, sender)) break;
+      if (!validTradeProps(s, action.offer.wantProps, target)) break;
+      // Kartu toko tidak ikut berpindah di TRADE_RESPOND, jadi tawaran berkartu ditolak.
+      if (action.offer.giveCards !== 0 || action.offer.wantCards !== 0) break;
       if (target.character === "diplomat" && target.hand.includes("veto")) break;
       s.trade = action.offer;
       s.phase = "post_roll";
@@ -1188,12 +1264,14 @@ export function applyAction(prev: GameState, action: Action): GameState {
       to.cash -= offer.wantCash;
       from.cash += offer.wantCash;
       for (const id of offer.giveProps) {
+        if (!isTileId(id)) continue;
         if (s.tiles[id].owner !== from.id || s.tiles[id].houses > 0) continue;
         s.tiles[id].owner = to.id;
         from.properties = from.properties.filter((x) => x !== id);
         to.properties.push(id);
       }
       for (const id of offer.wantProps) {
+        if (!isTileId(id)) continue;
         if (s.tiles[id].owner !== to.id || s.tiles[id].houses > 0) continue;
         s.tiles[id].owner = from.id;
         to.properties = to.properties.filter((x) => x !== id);
@@ -1212,7 +1290,11 @@ export function applyAction(prev: GameState, action: Action): GameState {
       break;
 
     case "END_TURN": {
-      if (s.phase === "auction" || s.trade || s.offer) break;
+      if (s.phase === "auction" || s.offer) break;
+      if (s.trade) {
+        pushLog(s, `Tawaran dagang kedaluwarsa (penerima tidak merespons).`);
+        s.trade = null;
+      }
       endTurn(s);
       break;
     }
@@ -1224,12 +1306,12 @@ export function applyAction(prev: GameState, action: Action): GameState {
       if (s.phase !== "game_over") endTurn(s);
       break;
     }
-
-    case "DISMISS":
-      s.offer = null;
-      break;
   }
 
+  // Aksi tidak sah tidak boleh menaikkan version: bandingkan state tanpa version lebih dulu.
+  s.version = prev.version;
+  if (JSON.stringify(s) === JSON.stringify(prev)) return prev;
+  s.version = prev.version + 1;
   return s;
 }
 

@@ -33,6 +33,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     if (!player) return NextResponse.json({ error: "Pemain tidak ditemukan" }, { status: 404 });
 
     const now = Date.now();
+    const mine = (game.state.reactions ?? [])
+      .filter((r) => r.playerId === seat.id)
+      .sort((a, b) => b.at - a.at)[0];
+    if (mine && now - mine.at < 2000) {
+      return NextResponse.json({ error: "Tunggu sebentar sebelum reaksi lagi" }, { status: 429 });
+    }
+
     const fresh = (game.state.reactions ?? []).filter((r) => now - r.at < 15000);
     const nextReactions = [
       ...fresh.slice(-7),

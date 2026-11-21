@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
 import { createGame } from "@/engine/create";
 import type { Settings } from "@/engine/types";
-import { dbCreateGame, dbGetRoom, dbUpdateRoom, makeToken, publicRoom, seatAuth } from "@/lib/online";
+import {
+  dbCreateGame,
+  dbGetRoom,
+  dbUpdateRoom,
+  hasDb,
+  hostAuth,
+  makeToken,
+  publicRoom,
+  sql,
+} from "@/lib/online";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +22,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     playerId?: string;
     token?: string;
     hostToken?: string;
-    fromTv?: boolean;
     forceReady?: boolean;
   };
 
@@ -21,11 +29,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   if (!room) return NextResponse.json({ error: "Room tidak ditemukan" }, { status: 404 });
   if (room.status !== "lobby") return NextResponse.json({ error: "Game sudah dimulai" }, { status: 409 });
 
-  const isHost =
-    Boolean(body.hostToken && room.host_token && body.hostToken === room.host_token) ||
-    Boolean(seatAuth(room, body.playerId ?? "", body.token ?? "")?.isHost) ||
-    Boolean(body.fromTv);
-  if (!isHost) return NextResponse.json({ error: "Hanya host" }, { status: 403 });
+  if (!hostAuth(room, body.hostToken, body.playerId, body.token)) {
+    return NextResponse.json({ error: "Hanya host" }, { status: 403 });
+  }
 
   if (room.seats.length < 2) return NextResponse.json({ error: "Butuh minimal 2 pemain" }, { status: 409 });
   if (!body.forceReady && !room.seats.every((s) => s.ready)) {
@@ -48,8 +54,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   );
   const gameId = `g_${room.code}_${makeToken().slice(0, 8)}`;
 
-  await dbCreateGame({ id: gameId, code: room.code, state });
-  await dbUpdateRoom(room.code, { seats, status: "playing", game_id: gameId });
+  if (hasDb) {
+    // Klaim room secara atomik supaya dua request start tidak membuat dua game.
+    const claimed = (await sql`
+      update sp_rooms
+      set status = 'playing', game_id = ${gameId}, seats = ${JSON.stringify(seats)}::jsonb, updated_at = now()
+      where code = ${room.code} and status = 'lobby'
+      returning code
+    `) as Array<{ code: string }>;
+    if (!claimed[0]) return NextResponse.json({ error: "Game sudah dimulai" }, { status: 409 });
+
+    try {
+      await dbCreateGame({ id: gameId, code: room.code, state });
+    } catch (err) {
+      console.error("start game failed", err);
+      await sql`
+        update sp_rooms
+        set status = 'lobby', game_id = null, seats = ${JSON.stringify(room.seats)}::jsonb, updated_at = now()
+        where code = ${room.code} and game_id = ${gameId}
+      `;
+      return NextResponse.json({ error: "Gagal memulai game, coba lagi" }, { status: 503 });
+    }
+  } else {
+    await dbCreateGame({ id: gameId, code: room.code, state });
+    await dbUpdateRoom(room.code, { seats, status: "playing", game_id: gameId });
+  }
 
   return NextResponse.json({
     ok: true,

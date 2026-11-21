@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CHARACTERS, GROUP_COLORS, GROUP_NAMES, GROUP_TILES, MISSIONS, SHOP_CARDS, TILES } from "@/engine/data";
+import { GROUP_COLORS, GROUP_NAMES, GROUP_TILES, MISSIONS, SHOP_CARDS, TILES, WAVE_LABEL, WAVE_MULT } from "@/engine/data";
 import {
   buildCost,
   current,
@@ -85,7 +85,7 @@ export function AuctionDialog({
               <>
                 <Button
                   variant="sun"
-                  className="min-h-0 px-3 py-1.5 text-xs"
+                  className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs"
                   disabled={a.bid + step > bidder.cash}
                   onClick={() => act({ type: "BID", amount: a.bid + step })}
                 >
@@ -93,7 +93,7 @@ export function AuctionDialog({
                 </Button>
                 <Button
                   variant="primary"
-                  className="min-h-0 px-3 py-1.5 text-xs"
+                  className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs"
                   disabled={a.bid + step * 2 > bidder.cash}
                   onClick={() => act({ type: "BID", amount: a.bid + step * 2 })}
                 >
@@ -101,7 +101,7 @@ export function AuctionDialog({
                 </Button>
                 <Button
                   variant="ghost"
-                  className="min-h-0 px-2.5 py-1.5 text-xs"
+                  className="min-h-11 sm:min-h-0 px-2.5 py-1.5 text-xs"
                   onClick={() => act({ type: "PASS_BID" })}
                 >
                   Lewati
@@ -110,7 +110,7 @@ export function AuctionDialog({
             ) : null}
             <Button
               variant="blue"
-              className="min-h-0 px-3 py-1.5 text-xs"
+              className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs"
               onClick={() => setPeeking(false)}
             >
               🔼 Detail Lelang
@@ -129,7 +129,7 @@ export function AuctionDialog({
             Perlu cek kepemilikan grup di peta?
           </span>
           <Button
-            className="min-h-0 px-3 py-1.5 text-xs"
+            className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs"
             onClick={() => {
               onFocusTile?.(tile.id);
               setPeeking(true);
@@ -324,6 +324,7 @@ export function TradeDialog({
     setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
   if (state.trade) {
+    if (!open) return null;
     const offer = state.trade;
     const from = playerOf(state, offer.from);
     const recipient = playerOf(state, offer.to);
@@ -333,12 +334,16 @@ export function TradeDialog({
     }
 
     const canRespond = viewerId ? offer.to === viewerId : !recipient?.isBot;
+    const closeOffer = () => {
+      if (canRespond) act({ type: "TRADE_RESPOND", accept: false });
+      onClose();
+    };
 
     // Counter-Offer Composer Mode
     if (counterMode && recipient && from) {
       return (
         <Modal
-          open
+          open={open}
           title={`Nego Balik ke ${from.name}`}
           onClose={() => setCounterMode(false)}
           width="max-w-lg"
@@ -349,7 +354,7 @@ export function TradeDialog({
                 Atur ulang uang atau properti lalu kirim balik ke <b className="text-ink">{from.name}</b>.
               </span>
               <Button
-                className="min-h-0 px-3 py-1 text-xs"
+                className="min-h-11 sm:min-h-0 px-3 py-1 text-xs"
                 onClick={() => setCounterMode(false)}
               >
                 ← Kembali
@@ -489,7 +494,7 @@ export function TradeDialog({
               </div>
               <div className="mt-1 flex flex-wrap gap-2 text-xs font-semibold text-ink-soft">
                 <span>
-                  Terima: <b className="text-[#0e8a5a]">{rp(offer.giveCash)}</b>
+                  Terima: <b className="text-positive">{rp(offer.giveCash)}</b>
                   {offer.giveProps.length ? ` + ${offer.giveProps.map((id) => TILES[id].short).join(", ")}` : ""}
                 </span>
                 <span>·</span>
@@ -505,21 +510,21 @@ export function TradeDialog({
                 <>
                   <Button
                     variant="mint"
-                    className="min-h-0 px-3 py-1.5 text-xs"
+                    className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs"
                     onClick={() => act({ type: "TRADE_RESPOND", accept: true })}
                   >
                     ✓ Terima
                   </Button>
                   <Button
                     variant="sun"
-                    className="min-h-0 px-3 py-1.5 text-xs"
+                    className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs"
                     onClick={startCounter}
                   >
                     🔄 Nego Balik
                   </Button>
                   <Button
                     variant="danger"
-                    className="min-h-0 px-3 py-1.5 text-xs"
+                    className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs"
                     onClick={() => act({ type: "TRADE_RESPOND", accept: false })}
                   >
                     ✕ Tolak
@@ -528,7 +533,7 @@ export function TradeDialog({
               ) : null}
               <Button
                 variant="blue"
-                className="min-h-0 px-3 py-1.5 text-xs"
+                className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs"
                 onClick={() => setPeeking(false)}
               >
                 🔼 Detail
@@ -541,10 +546,9 @@ export function TradeDialog({
 
     return (
       <Modal
-        open
+        open={open}
         title={canRespond ? `Tawaran Dagang untuk ${recipient?.name}` : "Tawaran Dagang Terkirim"}
-        onClose={onClose}
-        dismissable={!canRespond}
+        onClose={closeOffer}
         width="max-w-md"
       >
         <div className="space-y-3.5">
@@ -553,7 +557,7 @@ export function TradeDialog({
               <b className="text-ink">{from?.name}</b> menawarkan ke <b className="text-ink">{recipient?.name}</b>
             </p>
             <Button
-              className="min-h-0 shrink-0 px-3 py-1.5 text-xs"
+              className="min-h-11 sm:min-h-0 shrink-0 px-3 py-1.5 text-xs"
               onClick={() => {
                 const focusId = offer.wantProps[0] ?? offer.giveProps[0];
                 if (focusId !== undefined) onFocusTile?.(focusId);
@@ -608,7 +612,7 @@ export function TradeDialog({
               </p>
             ))}
             {recipientMonopolies.map((g) => (
-              <p key={g} className="mt-1.5 font-bold text-[#0e8a5a]">
+              <p key={g} className="mt-1.5 font-bold text-positive">
                 ✨ Peluang: Kamu akan melengkapi Monopoli grup {GROUP_NAMES[g]}!
               </p>
             ))}
@@ -796,14 +800,14 @@ export function PortfolioDialog({
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border-2 border-ink bg-tint p-3">
           <div>
             <div className="text-xs font-semibold text-ink-soft">Cash tersedia</div>
-            <div className="money text-xl font-extrabold text-[#0e8a5a]">{rp(me.cash)}</div>
+            <div className="money text-xl font-extrabold text-positive">{rp(me.cash)}</div>
           </div>
           <div className="flex items-center gap-2">
             <Chip color="#DFE6FF">{me.properties.length} properti</Chip>
             {onOpenBank ? (
               <Button
                 variant="sun"
-                className="min-h-0 px-3 py-1.5 text-xs"
+                className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs"
                 onClick={() => {
                   onClose();
                   onOpenBank();
@@ -887,7 +891,7 @@ export function PortfolioDialog({
                             {complete && !st.mortgaged && st.houses < 5 ? (
                               <Button
                                 variant="sun"
-                                className="min-h-0 px-2.5 py-1 text-[11px]"
+                                className="min-h-11 sm:min-h-0 px-2.5 py-1 text-[11px]"
                                 disabled={!canBuild}
                                 onClick={() => act({ type: "BUILD", tile: id })}
                               >
@@ -896,7 +900,7 @@ export function PortfolioDialog({
                             ) : null}
                             {st.houses > 0 ? (
                               <Button
-                                className="min-h-0 px-2.5 py-1 text-[11px]"
+                                className="min-h-11 sm:min-h-0 px-2.5 py-1 text-[11px]"
                                 disabled={!canSell}
                                 onClick={() => act({ type: "SELL_HOUSE", tile: id })}
                               >
@@ -906,7 +910,7 @@ export function PortfolioDialog({
                             {st.mortgaged ? (
                               <Button
                                 variant="mint"
-                                className="min-h-0 px-2.5 py-1 text-[11px]"
+                                className="min-h-11 sm:min-h-0 px-2.5 py-1 text-[11px]"
                                 disabled={!canUnmortgage}
                                 onClick={() => act({ type: "UNMORTGAGE", tile: id })}
                               >
@@ -914,7 +918,7 @@ export function PortfolioDialog({
                               </Button>
                             ) : st.houses === 0 ? (
                               <Button
-                                className="min-h-0 px-2.5 py-1 text-[11px]"
+                                className="min-h-11 sm:min-h-0 px-2.5 py-1 text-[11px]"
                                 disabled={!canMortgage}
                                 onClick={() => act({ type: "MORTGAGE", tile: id })}
                               >
@@ -954,7 +958,7 @@ export function PortfolioDialog({
                         {st.mortgaged ? (
                           <Button
                             variant="mint"
-                            className="min-h-0 px-2.5 py-1 text-[11px]"
+                            className="min-h-11 sm:min-h-0 px-2.5 py-1 text-[11px]"
                             disabled={!isTurn || me.cash < unmortgageCost}
                             onClick={() => act({ type: "UNMORTGAGE", tile: id })}
                           >
@@ -962,7 +966,7 @@ export function PortfolioDialog({
                           </Button>
                         ) : (
                           <Button
-                            className="min-h-0 px-2.5 py-1 text-[11px]"
+                            className="min-h-11 sm:min-h-0 px-2.5 py-1 text-[11px]"
                             disabled={!isTurn}
                             onClick={() => act({ type: "MORTGAGE", tile: id })}
                           >
@@ -1059,7 +1063,7 @@ export function ShopDialog({
                   <span className="text-xs font-bold">{c?.name}</span>
                   <Button
                     variant="primary"
-                    className="min-h-0 px-3 py-1.5 text-xs"
+                    className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs"
                     disabled={!isTurn || target === null}
                     onClick={() => act({ type: "USE_CARD", card: id, target: target ?? undefined })}
                   >
@@ -1142,7 +1146,7 @@ export function BankDialog({
             {[100, 250, 500].map((amount) => (
               <Button
                 key={amount}
-                className="min-h-0 px-3 py-1.5 text-xs"
+                className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs"
                 disabled={!isTurn || !features(state).loans || amount > room}
                 onClick={() => act({ type: "TAKE_LOAN", amount })}
               >
@@ -1151,7 +1155,7 @@ export function BankDialog({
             ))}
             <Button
               variant="mint"
-              className="min-h-0 px-3 py-1.5 text-xs"
+              className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs"
               disabled={!isTurn || debt === 0 || me.cash < debt}
               onClick={() => act({ type: "REPAY_LOAN" })}
             >
@@ -1182,7 +1186,7 @@ export function BankDialog({
                 <span className="money text-xs font-semibold">{rp(price)}</span>
                 {owned ? (
                   <Button
-                    className="min-h-0 px-3 py-1 text-xs"
+                    className="min-h-11 sm:min-h-0 px-3 py-1 text-xs"
                     disabled={!isTurn}
                     onClick={() => act({ type: "SELL_SHARE", group: g })}
                   >
@@ -1191,7 +1195,7 @@ export function BankDialog({
                 ) : (
                   <Button
                     variant="sun"
-                    className="min-h-0 px-3 py-1 text-xs"
+                    className="min-h-11 sm:min-h-0 px-3 py-1 text-xs"
                     disabled={!isTurn || !features(state).shares || state.wave < 2 || me.cash < price}
                     onClick={() => act({ type: "BUY_SHARE", group: g })}
                   >
@@ -1202,7 +1206,7 @@ export function BankDialog({
             ))}
           </div>
           <p className="mt-2 text-[11px] text-ink-soft">
-            Dividen 10% dari setiap sewa pemilik grup dibagikan ke pemegang saham (maks Rp 150 per saham).
+            Dividen 10% dari setiap sewa pemilik grup dibagikan ke pemegang saham (maks {rp(150)} per saham).
           </p>
         </div>
       </div>
@@ -1311,9 +1315,14 @@ export function ResultDialog({
 export function PassGate({ name, onContinue }: { name: string; onContinue: () => void }) {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/60 p-6 backdrop-blur-[3px]">
-      <div className="panel w-full max-w-sm p-6 text-center animate-[pop_0.2s_var(--ease-out-soft)]">
+      <div
+        className="panel w-full max-w-sm p-6 text-center animate-[pop_0.2s_var(--ease-out-soft)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="passgate-title"
+      >
         <span className="sticker -rotate-2 bg-sun text-xs">Giliran Berikutnya</span>
-        <div className="my-3 font-display text-3xl font-extrabold">{name}</div>
+        <div id="passgate-title" className="my-3 font-display text-3xl font-extrabold">{name}</div>
         <p className="text-xs font-medium text-ink-soft">
           Pastikan pemain lain tidak mengintip misi rahasiamu sebelum menekan tombol di bawah.
         </p>
@@ -1325,7 +1334,19 @@ export function PassGate({ name, onContinue }: { name: string; onContinue: () =>
   );
 }
 
-export function RulesDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function RulesDialog({
+  open,
+  onClose,
+  maxRounds = 17,
+}: {
+  open: boolean;
+  onClose: () => void;
+  maxRounds?: number;
+}) {
+  const waveNames = ([1, 2, 3, 4] as const).map(
+    (w) => `${WAVE_LABEL[w].charAt(0)}${WAVE_LABEL[w].slice(1).toLowerCase()} ×${WAVE_MULT[w]}`,
+  );
+  const waveRounds = `Ronde 1–5 Rintisan, 6–11 Pembangunan, 12–15 Puncak${maxRounds >= 16 ? `, 16–${maxRounds} Krisis` : ""}.`;
   return (
     <Modal open={open} onClose={onClose} title="Buku Aturan Ringkas" width="max-w-2xl">
       <div className="space-y-3 text-sm leading-relaxed text-ink-soft">
@@ -1342,12 +1363,14 @@ export function RulesDialog({ open, onClose }: { open: boolean; onClose: () => v
           <p>Butuh seluruh grup warna untuk membangun. Selisih rumah antar kota satu grup maksimal 1. Bank hanya memiliki 32 rumah dan 12 hotel.</p>
         </section>
         <section className="rounded-2xl border-2 border-ink bg-white p-3">
-          <h3 className="font-display text-base font-extrabold text-ink">4 Gelombang Ekonomi</h3>
-          <p>R1–5 Rintisan (hotel terkunci), R6–11 Pembangunan (hotel &amp; saham terbuka), R12–15 Puncak (PBB 5%), R16–17 Krisis (pinjaman jatuh tempo, sewa ×2,5).</p>
+          <h3 className="font-display text-base font-extrabold text-ink">Gelombang Ekonomi</h3>
+          <p>
+            {waveRounds} Pengali sewa mengikuti fase: {waveNames.join(" · ")}.
+          </p>
         </section>
         <section className="rounded-2xl border-2 border-ink bg-sun-pale p-3">
           <h3 className="font-display text-base font-extrabold text-ink">Menang &amp; Misi Rahasia</h3>
-          <p>Menang jika menjadi pemain terakhir yang bertahan, atau skor tertinggi setelah Ronde 17 (cash + aset + 200/grup + 200/misi − utang).</p>
+          <p>Menang jika menjadi pemain terakhir yang bertahan, atau skor tertinggi setelah Ronde {maxRounds} (cash + aset + 200/grup + 200/misi − utang).</p>
         </section>
       </div>
     </Modal>
@@ -1376,7 +1399,7 @@ export function MissionDialog({
         <div className="font-display text-2xl font-extrabold">{mission?.title}</div>
         <p className="text-sm font-medium text-ink-soft">{mission?.desc}</p>
         <Chip color={me?.missionDone ? "#2FD592" : "#DFE6FF"}>
-          {me?.missionDone ? "Selesai (+Rp 150 & 200 poin)" : "Sedang berjalan"}
+          {me?.missionDone ? `Selesai (+${rp(150)} & 200 poin)` : "Sedang berjalan"}
         </Chip>
         <p className="text-xs font-medium text-ink-soft">Simpan rahasia misi ini dari pemain lain.</p>
       </div>
@@ -1402,12 +1425,3 @@ export function PlayerDetailDialog({
   );
 }
 
-export function CharacterBadge({ id }: { id: string }) {
-  const c = CHARACTERS.find((x) => x.id === id);
-  if (!c) return null;
-  return (
-    <span className={cn("chip")} title={`${c.perk} · ${c.flaw}`}>
-      {c.name}
-    </span>
-  );
-}

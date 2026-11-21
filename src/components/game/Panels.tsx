@@ -20,6 +20,7 @@ import { Button, Chip, Stat, Tooltip } from "@/components/ui/kit";
 
 export function useCashDeltas(state: GameState | null) {
   const prevCashRef = useRef<Record<string, number>>({});
+  const timersRef = useRef<Map<string, number>>(new Map());
   const [deltas, setDeltas] = useState<Record<string, { amount: number; seq: number }>>({});
   const seqRef = useRef(0);
   const sig = state ? state.players.map((p) => `${p.id}:${p.cash}`).join("|") : "";
@@ -27,31 +28,40 @@ export function useCashDeltas(state: GameState | null) {
   useEffect(() => {
     if (!state) return;
     const next: Record<string, { amount: number; seq: number }> = {};
-    let hasNew = false;
     for (const p of state.players) {
       const prev = prevCashRef.current[p.id];
       if (prev !== undefined && prev !== p.cash) {
         seqRef.current += 1;
-        next[p.id] = { amount: p.cash - prev, seq: seqRef.current };
-        hasNew = true;
+        const seq = seqRef.current;
+        next[p.id] = { amount: p.cash - prev, seq };
+
+        const running = timersRef.current.get(p.id);
+        if (running !== undefined) window.clearTimeout(running);
+        const timer = window.setTimeout(() => {
+          timersRef.current.delete(p.id);
+          setDeltas((cur) => {
+            if (cur[p.id]?.seq !== seq) return cur;
+            const copy = { ...cur };
+            delete copy[p.id];
+            return copy;
+          });
+        }, 1400);
+        timersRef.current.set(p.id, timer);
       }
       prevCashRef.current[p.id] = p.cash;
     }
-    if (!hasNew) return;
+    if (Object.keys(next).length === 0) return;
     setDeltas((cur) => ({ ...cur, ...next }));
-    const ids = Object.keys(next);
-    const t = window.setTimeout(() => {
-      setDeltas((cur) => {
-        const copy = { ...cur };
-        for (const id of ids) {
-          if (copy[id]?.seq === next[id].seq) delete copy[id];
-        }
-        return copy;
-      });
-    }, 1400);
-    return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig]);
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+      timers.clear();
+    };
+  }, []);
 
   return deltas;
 }
@@ -87,7 +97,7 @@ export function PlayerRail({ state, onInspect }: { state: GameState; onInspect: 
                 <span
                   key={delta.seq}
                   className={cn(
-                    "pointer-events-none absolute -top-2.5 right-1 z-20 rounded-full border-[1.5px] border-ink px-1.5 py-[1px] font-mono text-[9.5px] font-extrabold animate-[float-delta_1.35s_ease-out_forwards]",
+                    "pointer-events-none absolute -top-2.5 right-1 z-20 rounded-full border-[1.5px] border-ink px-1.5 py-[1px] font-mono text-[10px] font-extrabold animate-[float-delta_1.35s_ease-out_forwards]",
                     delta.amount > 0 ? "bg-mint text-ink" : "bg-tomato text-white",
                   )}
                 >
@@ -106,10 +116,10 @@ export function PlayerRail({ state, onInspect }: { state: GameState; onInspect: 
               <div className="mt-1 truncate font-display text-[11px] font-extrabold leading-tight text-ink">
                 {p.name}
               </div>
-              <div className="money truncate text-[11px] font-extrabold leading-tight text-[#0e8a5a]">
+              <div className="money truncate text-[11px] font-extrabold leading-tight text-positive">
                 {rp(p.cash)}
               </div>
-              <div className="truncate text-[9px] font-semibold text-ink-soft">
+              <div className="truncate text-[10px] font-semibold text-ink-soft">
                 {p.properties.length} kota
               </div>
             </button>
@@ -195,17 +205,17 @@ export function PlayerRail({ state, onInspect }: { state: GameState; onInspect: 
                             )}
                           />
                         ))}
-                        {mono ? <span className="text-[9px] font-black leading-none text-ink">★</span> : null}
+                        {mono ? <span className="text-[10px] font-black leading-none text-ink">★</span> : null}
                       </span>
                     );
                   })}
                   {p.properties.some((id) => TILES[id].type === "transport") ? (
-                    <span className="rounded-full border border-ink bg-blue-pale px-1.5 py-[1px] text-[9px] font-bold">
+                    <span className="rounded-full border border-ink bg-blue-pale px-1.5 py-[1px] text-[10px] font-bold">
                       🚆×{p.properties.filter((id) => TILES[id].type === "transport").length}
                     </span>
                   ) : null}
                   {p.properties.some((id) => TILES[id].type === "utility") ? (
-                    <span className="rounded-full border border-ink bg-tint px-1.5 py-[1px] text-[9px] font-bold">
+                    <span className="rounded-full border border-ink bg-tint px-1.5 py-[1px] text-[10px] font-bold">
                       ⚡×{p.properties.filter((id) => TILES[id].type === "utility").length}
                     </span>
                   ) : null}
@@ -460,7 +470,7 @@ export function MissionCard({ state, seat }: { state: GameState; seat: number })
   if (!p || !features(state).missions) return null;
   const mission = MISSIONS.find((m) => m.id === p.mission);
   return (
-    <Tooltip tip="Misi rahasia memberi bonus Rp 150 dan +200 poin akhir bila selesai." position="top" className="w-full">
+    <Tooltip tip={`Misi rahasia memberi bonus ${rp(150)} dan +200 poin akhir bila selesai.`} position="top" className="w-full">
       <div className="w-full rounded-[22px] border-[3px] border-ink bg-blue-pale p-3.5">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[11px] font-bold uppercase tracking-[1px] text-blue">Misi rahasia</span>
@@ -508,7 +518,7 @@ export function PlayerInspect({
       </div>
       {character ? (
         <div className="rounded-2xl border-[2.5px] border-ink bg-sun-pale p-3 text-xs">
-          <p className="font-bold text-[#0e8a5a]">+ Kelebihan: {character.perk}</p>
+          <p className="font-bold text-positive">+ Kelebihan: {character.perk}</p>
           <p className="mt-0.5 font-semibold text-tomato">− Kelemahan: {character.flaw}</p>
         </div>
       ) : null}

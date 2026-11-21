@@ -11,7 +11,7 @@ import { cn } from "@/lib/format";
 import type { PublicRoom } from "@/lib/online";
 import { initMute, sfx } from "@/lib/sfx";
 
-type Identity = { playerId: string; token: string };
+type Identity = { playerId: string; token: string; reconnectKey?: string };
 
 export default function RoomPage() {
   const params = useParams<{ code: string }>();
@@ -82,7 +82,11 @@ export default function RoomPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Gagal gabung");
-      const idn: Identity = { playerId: data.playerId, token: data.token };
+      const idn: Identity = {
+        playerId: data.playerId,
+        token: data.token,
+        reconnectKey: data.reconnectKey,
+      };
       localStorage.setItem(`sp-seat-${code}`, JSON.stringify(idn));
       setIdentity(idn);
       setRoom(data.room);
@@ -101,7 +105,7 @@ export default function RoomPage() {
       const res = await fetch(`/api/rooms/${code}/join`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...(identity ?? {}), ...payload }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Gagal mengubah bot");

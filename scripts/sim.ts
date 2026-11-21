@@ -24,8 +24,20 @@ function checkInvariants(s: GameState, errors: string[]) {
   const owners = new Map<string, Set<number>>();
   for (const p of s.players) {
     if (p.cash < 0) errors.push(`cash<0 ${p.name} ${p.cash}`);
+    if (p.bankrupt && (p.cash !== 0 || p.properties.length > 0)) {
+      errors.push(`bankrupt state ${p.name} cash=${p.cash} props=${p.properties.length}`);
+    }
+    if (p.inJail && p.position !== 10) errors.push(`jail position ${p.name} ${p.position}`);
+    if (p.hand.length > 2) errors.push(`hand ${p.name} ${p.hand.length}`);
     owners.set(p.id, new Set());
   }
+  if ((s.phase === "auction") !== (s.auction !== null)) {
+    errors.push(`auction/phase mismatch ${s.phase}/${s.auction ? "auction" : "null"}`);
+  }
+  if ((s.winner !== null) !== (s.phase === "game_over")) {
+    errors.push(`winner/phase mismatch winner=${s.winner} phase=${s.phase}`);
+  }
+  if (s.round > s.settings.maxRounds) errors.push(`round ${s.round}>${s.settings.maxRounds}`);
   for (const p of s.players) {
     for (const id of p.properties) {
       if (owners.get(p.id)!.has(id)) errors.push(`duplicate prop ${p.name} ${TILES[id].name}`);
@@ -36,6 +48,7 @@ function checkInvariants(s: GameState, errors: string[]) {
   for (let i = 0; i < 40; i++) {
     const st = s.tiles[i];
     if (st.houses < 0 || st.houses > 5) errors.push(`houses ${TILES[i].name} ${st.houses}`);
+    if (st.mortgaged && st.houses > 0) errors.push(`mortgaged with houses ${TILES[i].name}`);
     if (st.owner && !owners.get(st.owner)?.has(i)) errors.push(`owner not in list ${TILES[i].name}`);
     if (!st.owner && st.houses > 0) errors.push(`houses without owner ${TILES[i].name}`);
   }
@@ -117,3 +130,4 @@ console.log(`median rounds: ${median} · avg: ${avg.toFixed(2)} · min ${rounds[
 console.log(`end:`, counts);
 console.log(`errors: ${errors.length}`);
 for (const e of errors.slice(0, 15)) console.log("  -", e);
+if (errors.length > 0) process.exit(1);

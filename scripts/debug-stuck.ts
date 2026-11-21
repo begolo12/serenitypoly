@@ -32,11 +32,15 @@ for (let g = 0; g < 300; g++) {
       console.log("phase:", s.phase, "turn", s.turnIndex, "round", s.round);
       console.log("players:", s.players.map((p) => `${p.name} cash=${p.cash} att=${p.stats.tradeAttempts} props=${p.properties.length}`).join(" | "));
       console.log("history:", history.slice(-8));
-      process.exit(0);
+      process.exit(1);
     }
     history.push(key);
     s = applyAction(s, a ?? { type: "END_TURN" });
     steps++;
+  }
+  if (s.phase !== "game_over") {
+    console.log(`game ${g} preset ${preset} seats ${seats} tidak selesai dalam ${steps} langkah (phase ${s.phase})`);
+    process.exit(1);
   }
 }
 console.log("no stuck found");

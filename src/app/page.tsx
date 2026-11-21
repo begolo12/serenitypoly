@@ -161,7 +161,7 @@ export default function Home() {
       } else {
         localStorage.setItem(
           `sp-seat-${data.code}`,
-          JSON.stringify({ playerId: data.playerId, token: data.token }),
+          JSON.stringify({ playerId: data.playerId, token: data.token, reconnectKey: data.reconnectKey }),
         );
         router.push(`/room/${data.code}`);
       }

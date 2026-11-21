@@ -51,10 +51,15 @@ export function GameScreen({
   const [inspectId, setInspectId] = useState<string | null>(null);
   const [selectedTile, setSelectedTile] = useState<number | null>(null);
   const [gateOpen, setGateOpen] = useState(settings.mode === "hotseat");
+  const [tradeGate, setTradeGate] = useState<string | null>(null);
   const [botSpeed, setBotSpeed] = useState<1 | 2 | 3>(1);
   const [confettiKey, setConfettiKey] = useState<string | null>(null);
   const [timer, setTimer] = useState(settings.turnTimer);
-  const lastTurn = useRef<string>("");
+  const lastTurnKey = useRef<string>("");
+  const lastTurnPlayer = useRef<string>("");
+  const dismissedTrade = useRef<string>("");
+  const gatedTrade = useRef<string>("");
+  const botAttempt = useRef<string>("");
 
   useEffect(() => {
     initMute();
@@ -140,42 +145,102 @@ export function GameScreen({
   const tradeBot = state.trade ? playerOf(state, state.trade.to)?.isBot : false;
   const botPending = isBot || !!auctionBot || !!tradeBot;
 
+  const humanViewer =
+    settings.mode === "hotseat"
+      ? me && !me.isBot
+        ? me
+        : (state.players.find((p) => !p.isBot) ?? me)
+      : (state.players.find((p) => !p.isBot) ?? me);
+  const viewerId = humanViewer?.id ?? null;
+  const viewerSeat = humanViewer ? state.players.findIndex((p) => p.id === humanViewer.id) : state.turnIndex;
+  const tradeKey = state.trade
+    ? [
+        state.trade.from,
+        state.trade.to,
+        state.trade.giveCash,
+        state.trade.wantCash,
+        state.trade.giveProps.join("."),
+        state.trade.wantProps.join("."),
+        state.trade.giveCards ?? 0,
+        state.trade.wantCards ?? 0,
+      ].join("|")
+    : "";
+  const tradeViewerId = state.trade && settings.mode === "hotseat" ? state.trade.to : viewerId;
+
   useEffect(() => {
     if (!me?.id) return;
     if (state.phase === "game_over") return;
-    if (lastTurn.current === me.id) return;
-    lastTurn.current = me.id;
-    setTimer(settings.turnTimer);
-    if (settings.mode === "hotseat" && !me.isBot) {
-      setGateOpen(true);
+    const key = `${me.id}:${state.round}:${state.doubles}:${me.inJail ? "jail" : "free"}`;
+    if (lastTurnKey.current !== key) {
+      lastTurnKey.current = key;
+      setTimer(settings.turnTimer);
     }
-  }, [me?.id, state.phase, settings.mode, settings.turnTimer]);
+    if (lastTurnPlayer.current !== me.id) {
+      lastTurnPlayer.current = me.id;
+      if (settings.mode === "hotseat" && !me.isBot) setGateOpen(true);
+    }
+  }, [me?.id, me?.isBot, me?.inJail, state.round, state.doubles, state.phase, settings.mode, settings.turnTimer]);
 
   useEffect(() => {
-    if (state.phase === "game_over" || gateOpen) return;
+    if (state.phase === "game_over" || gateOpen || tradeGate) return;
     if (!botPending) return;
+    // Hanya auto-aksi untuk aktor bot. Lelang/trade yang menunggu pemain manusia tidak boleh memicu act().
+    if (state.phase === "auction" && !auctionBot) return;
+    if (state.trade && !tradeBot) return;
     const delay = botSpeed === 3 ? 150 : botSpeed === 2 ? 340 : 650;
     const t = window.setTimeout(() => {
       const action = botAction(state);
-      act(action ?? { type: "END_TURN" });
+      if (!action) return;
+      const sig = `${state.version}:${JSON.stringify(action)}`;
+      if (botAttempt.current === sig) return;
+      botAttempt.current = sig;
+      act(action);
     }, delay);
     return () => window.clearTimeout(t);
-  }, [state.version, state.phase, gateOpen, botPending, botSpeed, state, act]);
+  }, [state.version, state.phase, gateOpen, tradeGate, botPending, auctionBot, tradeBot, botSpeed, state, act]);
 
   useEffect(() => {
     if (!settings.turnTimer || gateOpen || isBot || state.phase === "game_over") return;
     if (state.phase === "auction" || state.trade) return;
+    if (panel !== null || inspectId) return;
     if (timer <= 0) return;
     const t = window.setTimeout(() => setTimer((v) => v - 1), 1000);
     return () => window.clearTimeout(t);
-  }, [timer, settings.turnTimer, gateOpen, isBot, state.phase, state.trade]);
+  }, [timer, settings.turnTimer, gateOpen, isBot, state.phase, state.trade, panel, inspectId]);
+
+  useEffect(() => {
+    if (!settings.turnTimer) return;
+    if (panel === null && !inspectId) return;
+    setTimer((v) => (v <= 0 ? settings.turnTimer : v));
+  }, [panel, inspectId, settings.turnTimer]);
 
   useEffect(() => {
     if (!settings.turnTimer || timer > 0 || isBot || gateOpen) return;
+    if (panel !== null || inspectId) return;
+    if (state.phase === "auction" || state.trade) return;
     if (state.phase === "await_roll" || state.phase === "jail") act({ type: "ROLL" });
     else if (state.phase === "post_roll") act({ type: "END_TURN" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timer]);
+  }, [timer, panel, inspectId]);
+
+  useEffect(() => {
+    if (!state.trade) {
+      if (tradeGate) setTradeGate(null);
+      return;
+    }
+    if (dismissedTrade.current === tradeKey) return;
+    const recipient = playerOf(state, state.trade.to);
+    if (!recipient || recipient.isBot) return;
+    if (settings.mode === "hotseat") {
+      if (gatedTrade.current === tradeKey) return;
+      gatedTrade.current = tradeKey;
+      setTradeGate(recipient.id);
+      setPanel(null);
+      return;
+    }
+    if (panel !== null) return;
+    setPanel("trade");
+  }, [state.trade, tradeKey, panel, settings.mode, tradeGate]);
 
   const openShared = (kind: PanelKind) => {
     sfx.click();
@@ -187,7 +252,13 @@ export function GameScreen({
     const fresh = createGame(settings, seats);
     stateRef.current = fresh;
     setState(fresh);
-    lastTurn.current = "";
+    lastTurnKey.current = "";
+    lastTurnPlayer.current = "";
+    dismissedTrade.current = "";
+    gatedTrade.current = "";
+    botAttempt.current = "";
+    setTimer(settings.turnTimer);
+    setTradeGate(null);
     setGateOpen(settings.mode === "hotseat");
     setPanel(null);
   };
@@ -252,7 +323,7 @@ export function GameScreen({
             type="button"
             onClick={onExit}
             aria-label="Kembali ke menu"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-ink bg-white text-xs font-extrabold text-ink active:scale-95"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-ink bg-white text-xs font-extrabold text-ink active:scale-95 sm:h-8 sm:w-8"
           >
             ←
           </button>
@@ -281,7 +352,7 @@ export function GameScreen({
                 sfx.click();
                 setBotSpeed((v) => (v === 1 ? 2 : v === 2 ? 3 : 1));
               }}
-              className="rounded-full border-2 border-ink bg-white px-2 py-1 font-mono text-[11px] font-bold text-ink"
+              className="min-h-11 rounded-full border-2 border-ink bg-white px-2 py-1 font-mono text-[11px] font-bold text-ink sm:min-h-0"
               title="Kecepatan Bot"
             >
               ⏩{botSpeed}×
@@ -292,7 +363,7 @@ export function GameScreen({
             type="button"
             onClick={() => openShared("rules")}
             aria-label="Buku aturan"
-            className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink bg-white text-xs"
+            className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-ink bg-white text-xs sm:h-8 sm:w-8"
           >
             📖
           </button>
@@ -329,23 +400,23 @@ export function GameScreen({
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <Tooltip tip="Kelola, bangun rumah, dan gadaikan propertimu (A)" position="bottom">
-            <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("portfolio")}>
+            <Button variant="ghost" className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("portfolio")}>
               🏘️ Asetku
             </Button>
           </Tooltip>
           <Tooltip tip="Lihat misi rahasiamu" position="bottom">
-            <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("mission")}>
+            <Button variant="ghost" className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("mission")}>
               🎯 Misi
             </Button>
           </Tooltip>
           <Tooltip tip="Ajukan pinjaman atau beli saham grup kota (B)" position="bottom">
-            <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("bank")}>
+            <Button variant="ghost" className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("bank")}>
               🏦 Bank
             </Button>
           </Tooltip>
           {features(state).shop ? (
             <Tooltip tip="Beli & pakai kartu aksi spesial" position="bottom">
-              <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("shop")}>
+              <Button variant="ghost" className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs" onClick={() => openShared("shop")}>
                 🛒 Toko
               </Button>
             </Tooltip>
@@ -353,7 +424,7 @@ export function GameScreen({
           <Tooltip tip={canAct ? "Tawarkan barter properti atau uang ke pemain lain (T)" : "Tunggu giliranmu untuk berdagang"} position="bottom">
             <Button
               variant="ghost"
-              className="min-h-0 px-3 py-1.5 text-xs"
+              className="min-h-11 sm:min-h-0 px-3 py-1.5 text-xs"
               disabled={!canAct}
               onClick={() => openShared("trade")}
             >
@@ -364,7 +435,7 @@ export function GameScreen({
             <Tooltip tip="Kecepatan giliran Bot AI (1× / 2× / 3×)" position="bottom">
               <Button
                 variant="ghost"
-                className="min-h-0 px-2.5 py-1.5 font-mono text-xs"
+                className="min-h-11 sm:min-h-0 px-2.5 py-1.5 font-mono text-xs"
                 onClick={() => {
                   sfx.click();
                   setBotSpeed((v) => (v === 1 ? 2 : v === 2 ? 3 : 1));
@@ -376,7 +447,7 @@ export function GameScreen({
           ) : null}
           <AudioMixerButton />
           <Tooltip tip="Buku aturan ringkas" position="bottom">
-            <Button variant="ghost" className="min-h-0 px-2.5 py-1.5 text-xs" onClick={() => openShared("rules")}>
+            <Button variant="ghost" className="min-h-11 sm:min-h-0 px-2.5 py-1.5 text-xs" onClick={() => openShared("rules")}>
               📖
             </Button>
           </Tooltip>
@@ -407,7 +478,7 @@ export function GameScreen({
             <ActionPanel state={state} act={act} canAct={!!canAct} onOpen={openShared} setSelectedTile={setSelectedTile} />
           </div>
           <RentBreakdown state={state} />
-          {settings.mode !== "hotseat" ? <MissionCard state={state} seat={state.turnIndex} /> : null}
+          {settings.mode !== "hotseat" ? <MissionCard state={state} seat={viewerSeat} /> : null}
           <div className="hidden lg:block">
             <Button variant="ghost" className="w-full text-xs text-ink-soft" onClick={onExit}>
               ← Kembali ke Menu Utama
@@ -428,20 +499,20 @@ export function GameScreen({
               <div className="flex items-center gap-1.5">
                 <Button
                   variant="primary"
-                  className="min-h-0 flex-1 py-2.5 text-xs"
+                  className="min-h-11 sm:min-h-0 flex-1 py-2.5 text-xs"
                   disabled={me.cash < state.offer.price}
                   onClick={() => act({ type: "BUY" })}
                 >
                   Beli {TILES[state.offer.tile].short} ({rp(state.offer.price)})
                 </Button>
                 <Button
-                  className="min-h-0 px-3 py-2.5 text-xs"
+                  className="min-h-11 sm:min-h-0 px-3 py-2.5 text-xs"
                   onClick={() => act({ type: "DECLINE" })}
                 >
                   Lelang
                 </Button>
                 <Button
-                  className="min-h-0 px-2.5 py-2.5 text-xs"
+                  className="min-h-11 sm:min-h-0 px-2.5 py-2.5 text-xs"
                   onClick={() => {
                     setSelectedTile(state.offer!.tile);
                     setPanel("property");
@@ -452,18 +523,18 @@ export function GameScreen({
               </div>
             ) : state.phase === "jail" && canAct ? (
               <div className="flex items-center gap-1.5">
-                <Button variant="primary" className="min-h-0 flex-1 py-2.5 text-xs" onClick={() => act({ type: "ROLL" })}>
+                <Button variant="primary" className="min-h-11 sm:min-h-0 flex-1 py-2.5 text-xs" onClick={() => act({ type: "ROLL" })}>
                   🎲 Lempar Dobel
                 </Button>
                 <Button
-                  className="min-h-0 px-3 py-2.5 text-xs"
+                  className="min-h-11 sm:min-h-0 px-3 py-2.5 text-xs"
                   disabled={me.cash < (me.character === "bandar" ? 100 : 50)}
                   onClick={() => act({ type: "PAY_JAIL" })}
                 >
                   Bayar {rp(me.character === "bandar" ? 100 : 50)}
                 </Button>
                 {me.jailCards > 0 ? (
-                  <Button variant="mint" className="min-h-0 px-2.5 py-2.5 text-xs" onClick={() => act({ type: "USE_JAIL_CARD" })}>
+                  <Button variant="mint" className="min-h-11 sm:min-h-0 px-2.5 py-2.5 text-xs" onClick={() => act({ type: "USE_JAIL_CARD" })}>
                     🎟️
                   </Button>
                 ) : null}
@@ -473,7 +544,7 @@ export function GameScreen({
                 <div className="flex items-center gap-1.5">
                   <Button
                     variant="primary"
-                    className="min-h-0 flex-1 py-2.5 text-sm"
+                    className="min-h-11 sm:min-h-0 flex-1 py-2.5 text-sm"
                     onClick={() => act({ type: "ROLL" })}
                   >
                     🎲 Lempar Dadu
@@ -481,7 +552,7 @@ export function GameScreen({
                   {features(state).golden && !me.goldenUsed ? (
                     <Button
                       variant="sun"
-                      className="min-h-0 px-3 py-2.5 text-xs"
+                      className="min-h-11 sm:min-h-0 px-3 py-2.5 text-xs"
                       onClick={() => act({ type: "DECLARE_GOLDEN" })}
                       title="Aktifkan Giliran Emas"
                     >
@@ -498,7 +569,7 @@ export function GameScreen({
               <div className="flex items-center gap-1.5">
                 <Button
                   variant="primary"
-                  className="min-h-0 flex-1 py-2.5 text-sm"
+                  className="min-h-11 sm:min-h-0 flex-1 py-2.5 text-sm"
                   onClick={() => act({ type: "END_TURN" })}
                 >
                   Akhiri Giliran →
@@ -506,7 +577,7 @@ export function GameScreen({
                 {me.properties.length > 0 ? (
                   <Button
                     variant="sun"
-                    className="min-h-0 px-3 py-2.5 text-xs"
+                    className="min-h-11 sm:min-h-0 px-3 py-2.5 text-xs"
                     onClick={() => openShared("portfolio")}
                   >
                     🏠 Bangun
@@ -523,7 +594,7 @@ export function GameScreen({
               <button
                 type="button"
                 onClick={() => openShared("portfolio")}
-                className="flex flex-col items-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
+                className="flex min-h-11 flex-col items-center justify-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
               >
                 <span>🏘️</span>
                 <span>Aset</span>
@@ -531,7 +602,7 @@ export function GameScreen({
               <button
                 type="button"
                 onClick={() => openShared("bank")}
-                className="flex flex-col items-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
+                className="flex min-h-11 flex-col items-center justify-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
               >
                 <span>🏦</span>
                 <span>Bank</span>
@@ -541,7 +612,7 @@ export function GameScreen({
                 disabled={!canAct}
                 onClick={() => openShared("trade")}
                 className={cn(
-                  "flex flex-col items-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95",
+                  "flex min-h-11 flex-col items-center justify-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95",
                   !canAct && "opacity-45",
                 )}
               >
@@ -551,7 +622,7 @@ export function GameScreen({
               <button
                 type="button"
                 onClick={() => openShared("mission")}
-                className="flex flex-col items-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
+                className="flex min-h-11 flex-col items-center justify-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
               >
                 <span>🎯</span>
                 <span>Misi</span>
@@ -560,7 +631,7 @@ export function GameScreen({
                 <button
                   type="button"
                   onClick={() => openShared("shop")}
-                  className="flex flex-col items-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
+                  className="flex min-h-11 flex-col items-center justify-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
                 >
                   <span>🛒</span>
                   <span>Toko</span>
@@ -569,7 +640,7 @@ export function GameScreen({
               <button
                 type="button"
                 onClick={() => openShared("log")}
-                className="flex flex-col items-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
+                className="flex min-h-11 flex-col items-center justify-center rounded-xl border-[1.5px] border-ink bg-tint py-1 text-[10px] font-bold text-ink active:scale-95"
               >
                 <span>📜</span>
                 <span>Log</span>
@@ -580,6 +651,15 @@ export function GameScreen({
       ) : null}
 
       {gateOpen && me ? <PassGate name={me.name} onContinue={() => setGateOpen(false)} /> : null}
+      {tradeGate && !gateOpen ? (
+        <PassGate
+          name={playerOf(state, tradeGate)?.name ?? "Pemain"}
+          onContinue={() => {
+            setTradeGate(null);
+            setPanel("trade");
+          }}
+        />
+      ) : null}
       {state.auction ? (
         <AuctionDialog state={state} act={act} onFocusTile={(id) => setSelectedTile(id)} />
       ) : null}
@@ -587,7 +667,11 @@ export function GameScreen({
         state={state}
         act={act}
         open={panel === "trade"}
-        onClose={() => setPanel(null)}
+        viewerId={tradeViewerId}
+        onClose={() => {
+          if (state.trade) dismissedTrade.current = tradeKey;
+          setPanel(null);
+        }}
         onFocusTile={(id) => setSelectedTile(id)}
       />
       <PortfolioDialog
@@ -595,13 +679,14 @@ export function GameScreen({
         act={act}
         open={panel === "portfolio"}
         onClose={() => setPanel(null)}
+        viewerId={viewerId}
         canAct={!!canAct}
         onOpenBank={() => setPanel("bank")}
       />
-      <ShopDialog state={state} act={act} open={panel === "shop"} onClose={() => setPanel(null)} />
-      <BankDialog state={state} act={act} open={panel === "bank"} onClose={() => setPanel(null)} />
-      <MissionDialog state={state} open={panel === "mission"} onClose={() => setPanel(null)} />
-      <RulesDialog open={panel === "rules"} onClose={() => setPanel(null)} />
+      <ShopDialog state={state} act={act} open={panel === "shop"} onClose={() => setPanel(null)} viewerId={viewerId} />
+      <BankDialog state={state} act={act} open={panel === "bank"} onClose={() => setPanel(null)} viewerId={viewerId} />
+      <MissionDialog state={state} open={panel === "mission"} onClose={() => setPanel(null)} viewerId={viewerId} />
+      <RulesDialog open={panel === "rules"} onClose={() => setPanel(null)} maxRounds={state.settings.maxRounds} />
       <PlayerDetailDialog state={state} playerId={inspectId} onClose={() => setInspectId(null)} />
       <Modal
         open={panel === "property" && selectedTile !== null}
@@ -641,7 +726,7 @@ export function GameScreen({
                     entry.tone === "warn"
                       ? "font-semibold text-tomato"
                       : entry.tone === "money"
-                        ? "font-semibold text-[#0e8a5a]"
+                        ? "font-semibold text-positive"
                         : entry.tone === "good"
                           ? "font-bold text-ink"
                           : "text-ink-soft",
@@ -694,7 +779,7 @@ function TurnCard({ state }: { state: GameState }) {
         </div>
         <div className="text-right">
           <div className="text-[11px] font-semibold text-ink-soft">Cash</div>
-          <div className="money text-lg font-extrabold text-[#0e8a5a]">{rp(me?.cash ?? 0)}</div>
+          <div className="money text-lg font-extrabold text-positive">{rp(me?.cash ?? 0)}</div>
         </div>
       </div>
 
@@ -727,7 +812,6 @@ export function ActionPanel({
   act,
   canAct,
   onOpen,
-  setSelectedTile,
   compact,
 }: {
   state: GameState;
@@ -751,6 +835,19 @@ export function ActionPanel({
     return (
       <div className="panel bg-sun-pale p-4 text-center text-sm font-bold">
         🔨 Lelang berjalan — tunggu semua penawar.
+      </div>
+    );
+  }
+
+  if (me.isBot) {
+    return (
+      <div className="panel space-y-1 p-4 text-center">
+        <div className="font-display text-sm font-extrabold">🤖 {me.name} sedang bermain…</div>
+        <p className="text-xs font-semibold text-ink-soft">
+          {state.offer
+            ? `Mempertimbangkan ${TILES[state.offer.tile].name} seharga ${rp(state.offer.price)}.`
+            : "Bot mempertimbangkan langkah terbaiknya."}
+        </p>
       </div>
     );
   }
@@ -815,7 +912,7 @@ export function ActionPanel({
         <div className="grid grid-cols-2 gap-2">
           <Tooltip tip="Ambil pinjaman bank atau jual saham untuk tambah modal" className="w-full">
             <Button
-              className="min-h-0 w-full px-2 py-1.5 text-[11px]"
+              className="min-h-11 sm:min-h-0 w-full px-2 py-1.5 text-[11px]"
               disabled={!canAct}
               onClick={() => onOpen("bank")}
             >
@@ -824,7 +921,7 @@ export function ActionPanel({
           </Tooltip>
           <Tooltip tip="Gadaikan atau jual rumah aset lain untuk tambah dana" className="w-full">
             <Button
-              className="min-h-0 w-full px-2 py-1.5 text-[11px]"
+              className="min-h-11 sm:min-h-0 w-full px-2 py-1.5 text-[11px]"
               disabled={!canAct || me.properties.length === 0}
               onClick={() => onOpen("portfolio")}
             >
@@ -913,7 +1010,7 @@ export function ActionPanel({
           className="w-full"
         >
           <Button
-            className="min-h-0 w-full px-3 py-2 text-xs"
+            className="min-h-11 sm:min-h-0 w-full px-3 py-2 text-xs"
             disabled={!canAct || me.properties.length === 0}
             onClick={() => onOpen("portfolio")}
           >
@@ -929,7 +1026,7 @@ export function ActionPanel({
           className="w-full"
         >
           <Button
-            className="min-h-0 w-full px-3 py-2 text-xs"
+            className="min-h-11 sm:min-h-0 w-full px-3 py-2 text-xs"
             disabled={!canAct || me.properties.length === 0}
             onClick={() => onOpen("portfolio")}
           >
@@ -939,24 +1036,24 @@ export function ActionPanel({
         {!compact ? (
           <>
             <Tooltip tip="Ajukan barter uang atau properti dengan pemain lain" className="w-full">
-              <Button className="min-h-0 w-full px-3 py-2 text-xs" disabled={!canAct} onClick={() => onOpen("trade")}>
+              <Button className="min-h-11 sm:min-h-0 w-full px-3 py-2 text-xs" disabled={!canAct} onClick={() => onOpen("trade")}>
                 🤝 Dagang
               </Button>
             </Tooltip>
             <Tooltip tip="Ambil pinjaman bank atau investasi saham grup warna" className="w-full">
-              <Button className="min-h-0 w-full px-3 py-2 text-xs" disabled={!canAct} onClick={() => onOpen("bank")}>
+              <Button className="min-h-11 sm:min-h-0 w-full px-3 py-2 text-xs" disabled={!canAct} onClick={() => onOpen("bank")}>
                 💳 Bank &amp; Saham
               </Button>
             </Tooltip>
             {features(state).shop ? (
               <Tooltip tip="Beli kartu taktis dari Pasar Loak" className="w-full">
-                <Button className="min-h-0 w-full px-3 py-2 text-xs" disabled={!canAct} onClick={() => onOpen("shop")}>
+                <Button className="min-h-11 sm:min-h-0 w-full px-3 py-2 text-xs" disabled={!canAct} onClick={() => onOpen("shop")}>
                   🛒 Pasar Loak
                 </Button>
               </Tooltip>
             ) : null}
             <Tooltip tip="Cek target misi rahasiamu" className="w-full">
-              <Button className="min-h-0 w-full px-3 py-2 text-xs" onClick={() => onOpen("mission")}>
+              <Button className="min-h-11 sm:min-h-0 w-full px-3 py-2 text-xs" onClick={() => onOpen("mission")}>
                 🎯 Misi
               </Button>
             </Tooltip>

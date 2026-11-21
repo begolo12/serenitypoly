@@ -1,7 +1,7 @@
-import { applyAction, buildCost, rentFor } from "../src/engine/actions";
+import { applyAction, applyCard, buildCost, rentFor } from "../src/engine/actions";
 import { botAction } from "../src/engine/bot";
 import { createGame, defaultSettings } from "../src/engine/create";
-import { GROUP_TILES, SHOP_CARDS, TILES } from "../src/engine/data";
+import { CARDS, GROUP_TILES, SHOP_CARDS, TILES } from "../src/engine/data";
 import type { GameState, Settings } from "../src/engine/types";
 
 let pass = 0;
@@ -81,20 +81,28 @@ console.log("Sewa & gelombang");
 
 console.log("Saham");
 {
-  let s = fresh("penuh");
-  const holder = s.players[0];
+  let s = fresh("penuh", 3);
+  const payer = s.players[0];
   const owner = s.players[1];
+  const holder = s.players[2];
   holder.cash = 5000;
+  s.turnIndex = 2;
   s.round = 7;
   s.wave = 2;
   s = applyAction(s, { type: "BUY_SHARE", group: "red" });
-  ok("beli saham berhasil", s.players[0].shares.includes("red"));
+  ok("beli saham berhasil", s.players[2].shares.includes("red"));
   const id = GROUP_TILES.red[0];
   s.tiles[id].owner = owner.id;
   owner.properties.push(id);
   s.tiles[id].houses = 5;
-  const withShare = rentFor(s, id, 7, owner, s.players[0]);
+  const withShare = rentFor(s, id, 7, owner, payer);
   ok("dividen memotong sewa", withShare.shareCut > 0, JSON.stringify(withShare));
+  const selfPaid = rentFor(s, id, 7, owner, holder);
+  ok(
+    "pemegang saham yang membayar sewa tidak kehilangan nilainya",
+    selfPaid.shareCut === 0 && selfPaid.final > withShare.final,
+    `${withShare.final} vs ${selfPaid.final}`,
+  );
 }
 
 console.log("Pinjaman");
@@ -305,6 +313,189 @@ console.log("Perbaikan v2.0 (Dividen, Banjir, Parkir Pot, Diplomat, Hotel & Bot)
   };
   const act = botAction(sb);
   ok("bot menerima tawaran dagang menguntungkan walau giveCash > target.cash", act?.type === "TRADE_RESPOND" && act.accept === true, JSON.stringify(act));
+}
+
+console.log("Validasi trade");
+{
+  const s = fresh("standar");
+  const a = s.players[0];
+  const b = s.players[1];
+  a.cash = 1000;
+  b.cash = 1000;
+  const base = {
+    from: a.id,
+    to: b.id,
+    giveCash: 0,
+    giveProps: [] as number[],
+    giveCards: 0,
+    wantCash: 0,
+    wantProps: [] as number[],
+    wantCards: 0,
+  };
+
+  const negGive = applyAction(s, { type: "TRADE_OFFER", offer: { ...base, giveCash: -100 } });
+  ok("TRADE_OFFER giveCash negatif ditolak", negGive === s && negGive.trade === null);
+  ok(
+    "cash kedua pihak tidak berubah saat giveCash negatif",
+    negGive.players[0].cash === 1000 && negGive.players[1].cash === 1000,
+  );
+
+  const negWant = applyAction(s, { type: "TRADE_OFFER", offer: { ...base, wantCash: -50 } });
+  ok("TRADE_OFFER wantCash negatif ditolak", negWant === s && negWant.trade === null);
+  ok(
+    "cash kedua pihak tidak berubah saat wantCash negatif",
+    negWant.players[0].cash === 1000 && negWant.players[1].cash === 1000,
+  );
+
+  const frac = applyAction(s, { type: "TRADE_OFFER", offer: { ...base, giveCash: 100.5 } });
+  ok("TRADE_OFFER cash desimal ditolak", frac === s && frac.trade === null);
+
+  const nan = applyAction(s, { type: "TRADE_OFFER", offer: { ...base, giveCash: Number.NaN } });
+  ok("TRADE_OFFER cash NaN ditolak", nan === s && nan.trade === null);
+
+  s.tiles[3].owner = b.id;
+  b.properties.push(3);
+  const notOwned = applyAction(s, { type: "TRADE_OFFER", offer: { ...base, giveProps: [3] } });
+  ok("TRADE_OFFER menyerahkan properti milik lawan ditolak", notOwned === s && notOwned.trade === null);
+
+  const unowned = applyAction(s, { type: "TRADE_OFFER", offer: { ...base, wantProps: [6] } });
+  ok("TRADE_OFFER meminta properti tak bertuan ditolak", unowned === s && unowned.trade === null);
+
+  const dup = applyAction(s, { type: "TRADE_OFFER", offer: { ...base, wantProps: [3, 3] } });
+  ok("TRADE_OFFER properti duplikat ditolak", dup === s && dup.trade === null);
+
+  const cards = applyAction(s, { type: "TRADE_OFFER", offer: { ...base, giveCards: 1 } });
+  ok("TRADE_OFFER berisi kartu ditolak", cards === s && cards.trade === null);
+
+  const good = applyAction(s, { type: "TRADE_OFFER", offer: { ...base, giveCash: 100, wantProps: [3] } });
+  ok(
+    "TRADE_OFFER sah diterima dan menaikkan version",
+    good !== s && good.trade !== null && good.version === s.version + 1,
+  );
+}
+
+console.log("DISMISS wajib lelang");
+{
+  const s = fresh("standar");
+  s.players[0].cash = 2000;
+  s.offer = { tile: 1, price: 60, rent: 10, rentFull: 120 };
+  s.phase = "post_roll";
+  const d = applyAction(s, { type: "DISMISS" });
+  ok("DISMISS memicu lelang", d.auction !== null && d.auction?.tile === 1);
+  ok("DISMISS tidak menutup tawaran tanpa lelang", d.offer === null && d.phase === "auction");
+  ok("DISMISS tidak memotong cash pembeli", d.players[0].cash === 2000);
+}
+
+console.log("Bangkrut di awal ronde");
+{
+  const s = fresh("klasik", 2);
+  s.turnIndex = 1;
+  s.round = 5;
+  s.players[0].cash = 0;
+  s.players[0].loans.push({ id: "x", principal: 400, rate: 0.1 });
+  const g = applyAction(s, { type: "END_TURN" });
+  ok(
+    "bangkrut karena bunga di startRound mengakhiri game",
+    g.phase === "game_over" && g.winner === g.players[1].id,
+    `phase=${g.phase} winner=${g.winner}`,
+  );
+}
+
+console.log("Pemain bangkrut");
+{
+  const s = fresh("penuh", 2);
+  const p0 = s.players[0];
+  p0.bankrupt = true;
+  p0.cash = 0;
+  p0.properties = [];
+  s.phase = "await_roll";
+  const loan = applyAction(s, { type: "TAKE_LOAN", amount: 500 });
+  ok("pemain bangkrut tidak bisa TAKE_LOAN", loan === s && loan.players[0].cash === 0);
+  const golden = applyAction(s, { type: "DECLARE_GOLDEN" });
+  ok("pemain bangkrut tidak bisa Giliran Emas", golden === s && golden.players[0].goldenActive === false);
+  const next = applyAction(s, { type: "END_TURN" });
+  ok(
+    "END_TURN tetap maju sehingga tidak deadlock",
+    next !== s && next.turnIndex === 1 && next.phase === "await_roll",
+    `turn=${next.turnIndex} phase=${next.phase}`,
+  );
+}
+
+console.log("Giliran Emas & sewa");
+{
+  const s = fresh("penuh", 2);
+  const owner = s.players[0];
+  const payer = s.players[1];
+  const id = GROUP_TILES.red[0];
+  s.tiles[id].owner = owner.id;
+  owner.properties.push(id);
+  payer.goldenActive = false;
+  const plain = rentFor(s, id, 7, owner, payer);
+  payer.goldenActive = true;
+  const paid = rentFor(s, id, 7, owner, payer);
+  ok("Giliran Emas tidak menggandakan sewa yang dibayar", paid.final === plain.final, `${plain.final} vs ${paid.final}`);
+  payer.goldenActive = false;
+  owner.goldenActive = true;
+  const earned = rentFor(s, id, 7, owner, payer);
+  ok("Giliran Emas pemilik tetap menggandakan sewa", earned.final === plain.final * 2, `${plain.final} vs ${earned.final}`);
+}
+
+console.log("Kartu mundur");
+{
+  const s = fresh("standar", 2);
+  const p = s.players[0];
+  const card = CARDS.find((c) => c.id === "c2");
+  ok("kartu Mundur 3 petak tersedia", Boolean(card));
+  if (card) {
+    p.position = 9;
+    const passes = p.stats.goPasses;
+    const cash = p.cash;
+    applyCard(s, p, card);
+    ok("kartu mundur tidak memberi gaji GO", p.stats.goPasses === passes && p.cash === cash, `cash=${p.cash}`);
+    ok("posisi mundur 3 petak benar", p.position === 6, `pos=${p.position}`);
+  }
+}
+
+console.log("Lelang tutup & Operasi Pasar");
+{
+  const tile = 6;
+  const s = fresh("penuh", 3);
+  s.wave = 3;
+  s.players[0].hand = ["s_operasi"];
+  s.tiles[tile].owner = s.players[1].id;
+  s.players[1].properties.push(tile);
+  s.effects.push({ id: "ev-demo", kind: "no_auction", roundsLeft: 1, label: "Lelang tutup" });
+  const blocked = applyAction(s, { type: "USE_CARD", card: "s_operasi", target: tile });
+  ok("no_auction memblokir Operasi Pasar", blocked === s && blocked.auction === null);
+  ok("kartu Operasi Pasar tidak hangus saat lelang tutup", blocked.players[0].hand.includes("s_operasi"));
+
+  const s2 = fresh("penuh", 3);
+  s2.wave = 3;
+  s2.players[0].hand = ["s_operasi"];
+  s2.tiles[tile].owner = s2.players[1].id;
+  s2.players[1].properties.push(tile);
+  const open = applyAction(s2, { type: "USE_CARD", card: "s_operasi", target: tile });
+  ok("Operasi Pasar memicu lelang saat lelang buka", open.auction !== null && open.players[0].hand.length === 0);
+}
+
+console.log("Sogok vs Promosi");
+{
+  const s = fresh("penuh", 2);
+  const me = s.players[0];
+  const tile = GROUP_TILES.red[0];
+  s.tiles[tile].owner = me.id;
+  me.properties.push(tile);
+  me.hand = ["s_promo", "s_sogok"];
+  const promoted = applyAction(s, { type: "USE_CARD", card: "s_promo", target: tile });
+  ok("Promosi aktif di properti sendiri", promoted.effects.some((e) => e.kind === "rent_mult" && e.tile === tile));
+  const sogok = applyAction(promoted, { type: "USE_CARD", card: "s_sogok" });
+  ok("sogok tidak menghapus Promosi sendiri", sogok === promoted && sogok.players[0].hand.includes("s_sogok"));
+
+  const s2 = fresh("penuh", 2);
+  s2.players[0].hand = ["s_sogok"];
+  s2.effects.push({ id: "ev-inflasi", kind: "rent_mult", mult: 1.25, roundsLeft: 2, label: "Inflasi" });
+  const removed = applyAction(s2, { type: "USE_CARD", card: "s_sogok" });
+  ok("sogok menghapus efek peristiwa", removed.effects.length === 0 && removed.players[0].hand.length === 0);
 }
 
 console.log(`\n${pass} lulus, ${fail} gagal`);

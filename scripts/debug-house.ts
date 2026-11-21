@@ -40,5 +40,6 @@ for (let g = 0; g < 150; g++) {
       break;
     }
   }
-  if (!ok) break;
+  if (!ok) process.exit(1);
 }
+console.log("house ledger ok");

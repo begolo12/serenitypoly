@@ -28,12 +28,13 @@ import {
 } from "@/components/game/Dialogs";
 import { ActionPanel, type PanelKind } from "@/components/game/GameScreen";
 import { QrCode } from "@/components/game/QrCode";
+import { QuickChat } from "@/components/game/QuickChat";
 import { Button, Chip, Modal, Tooltip } from "@/components/ui/kit";
 import { cn, rp } from "@/lib/format";
 import type { PublicRoom } from "@/lib/online";
 import { initMute, sfx, stopBgm } from "@/lib/sfx";
 
-type Identity = { playerId: string; token: string };
+type Identity = { playerId: string; token: string; reconnectKey?: string };
 
 const REACTION_EMOJIS = ["❤️", "🔥", "👏", "😱", "🤣", "💸"] as const;
 
@@ -136,11 +137,13 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [confirmSurrender, setConfirmSurrender] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pollNonce, setPollNonce] = useState(0);
   const deltas = useCashDeltas(state);
 
   const versionRef = useRef(0);
   const prevSeatsRef = useRef<number | null>(null);
   const botBusyRef = useRef(false);
+  const actingRef = useRef(false);
   const prevMyTurnRef = useRef(false);
   const pollFastRef = useRef(false);
   const failCountRef = useRef(0);
@@ -175,10 +178,18 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
   useEffect(() => {
     let alive = true;
     let timer = 0;
+    let inFlight = false;
 
     const tick = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
-        const res = await fetch(`/api/games/${code}?since=${versionRef.current}`, { cache: "no-store" });
+        const res = await fetch(`/api/games/${code}?since=${versionRef.current}`, {
+          cache: "no-store",
+          headers: identity
+            ? { "x-sp-player": identity.playerId, "x-sp-token": identity.token }
+            : undefined,
+        });
         if (res.ok) {
           failCountRef.current = 0;
           if (alive) setConnRetry(false);
@@ -214,6 +225,8 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
       } catch {
         failCountRef.current += 1;
         if (alive && failCountRef.current >= 2) setConnRetry(true);
+      } finally {
+        inFlight = false;
       }
       if (alive) {
         const waitMs =
@@ -228,19 +241,27 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
       }
     };
 
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      window.clearTimeout(timer);
+      void tick();
+    };
+
     void tick();
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       alive = false;
       window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [code]);
+  }, [code, identity, pollNonce]);
 
   useEffect(() => {
     if (!state || state.phase === "game_over") return;
     if (!pendingActorIsBot(state)) return;
 
-    const firstHuman = state.players.find((p) => !p.isBot && !p.bankrupt);
-    const shouldDrive = tv || (identity?.playerId && firstHuman?.id === identity.playerId);
+    const hostToken = tv ? (localStorage.getItem(`sp-host-${code}`) ?? undefined) : undefined;
+    const shouldDrive = tv ? Boolean(hostToken) : Boolean(identity?.playerId);
     if (!shouldDrive) return;
 
     const delay = tv ? 650 : 1100;
@@ -248,13 +269,11 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
       if (botBusyRef.current) return;
       botBusyRef.current = true;
       try {
-        const hostToken = tv ? localStorage.getItem(`sp-host-${code}`) ?? undefined : undefined;
         const res = await fetch(`/api/games/${code}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             ...(identity ?? {}),
-            tv,
             hostToken,
             action: { type: "BOT_STEP" },
           }),
@@ -294,7 +313,8 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
 
   const act = useCallback(
     async (action: Action) => {
-      if (!identity) return;
+      if (!identity || actingRef.current) return;
+      actingRef.current = true;
       try {
         const res = await fetch(`/api/games/${code}`, {
           method: "POST",
@@ -312,6 +332,8 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
         else setErr("");
       } catch {
         setErr("Koneksi bermasalah");
+      } finally {
+        actingRef.current = false;
       }
     },
     [code, identity],
@@ -319,8 +341,8 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
 
   const sendReaction = async (emoji: string) => {
     if (!identity || Date.now() < reactCoolUntil) return;
-    setReactCoolUntil(Date.now() + 1500);
-    window.setTimeout(() => setReactCoolUntil(0), 1520);
+    setReactCoolUntil(Date.now() + 2100);
+    window.setTimeout(() => setReactCoolUntil(0), 2120);
     sfx.click();
     try {
       const res = await fetch(`/api/games/${code}/react`, {
@@ -351,7 +373,6 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
         body: JSON.stringify({
           ...(identity ?? {}),
           hostToken,
-          fromTv: tv,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -378,28 +399,6 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
     }
   };
 
-  const reclaimSeat = async (playerId: string) => {
-    setBusy(true);
-    setErr("");
-    try {
-      const res = await fetch(`/api/rooms/${code}/join`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ reclaimId: playerId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Gagal klaim kursi");
-      const idn: Identity = { playerId: data.playerId, token: data.token };
-      localStorage.setItem(`sp-seat-${code}`, JSON.stringify(idn));
-      setIdentity(idn);
-      sfx.join();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Gagal klaim kursi");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   if (!state) {
     return (
       <WaitRoom
@@ -410,7 +409,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
         tv={tv}
         identity={identity}
         onRoomUpdate={(r) => setRoom(r)}
-        onStartGame={() => {}}
+        onStartGame={() => setPollNonce((n) => n + 1)}
         onBack={() => router.push("/")}
       />
     );
@@ -476,6 +475,13 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
           {state.event ? <Chip color="#FFE4DD">⚡ {state.event.label}</Chip> : null}
 
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <QuickChat
+              code={code}
+              state={state}
+              identity={identity}
+              enabled={state.phase !== "game_over"}
+              tv
+            />
             <Button className="min-h-0 px-3 py-1.5 text-xs" onClick={() => setQrModalOpen(true)}>
               📱 QR &amp; Kode
             </Button>
@@ -488,6 +494,12 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
             </Button>
           </div>
         </header>
+
+        {err ? (
+          <div className="rounded-2xl border-[2.5px] border-ink bg-tomato-pale px-3 py-2 text-xs font-bold">
+            ⚠️ {err}
+          </div>
+        ) : null}
 
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
           <aside className="lg:w-[236px] lg:shrink-0">
@@ -680,6 +692,13 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
               {showBoardOnMobile ? "🎮 Kontroler" : "🗺️ Papan"}
             </Button>
           ) : null}
+          <QuickChat
+            code={code}
+            state={state}
+            identity={identity}
+            enabled={state.phase !== "game_over"}
+            tv={false}
+          />
           <AudioMixerButton />
           <Button variant="ghost" className="min-h-0 px-2 py-1 text-xs" onClick={() => setPanel("rules")}>
             📖
@@ -699,35 +718,20 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
       {!myPlayer ? (
         <section className="mx-auto mt-3 w-full max-w-lg space-y-4">
           <div className="panel space-y-3 p-5">
-            <h2 className="font-display text-2xl font-extrabold leading-tight">Klaim Kursi Kontroler</h2>
+            <h2 className="font-display text-2xl font-extrabold leading-tight">Kursi Tidak Ditemukan</h2>
             <p className="text-xs font-medium text-ink-soft">
-              Pilih namamu di bawah untuk menyambungkan HP ini sebagai kontroler, atau buka layar papan TV.
+              Perangkat ini belum terhubung ke kursi mana pun. Buka tautan undangan room di perangkat
+              asalmu, atau gabung lewat halaman room (hanya saat lobi).
             </p>
-            <div className="space-y-2">
-              {state.players
-                .filter((p) => !p.isBot)
-                .map((p) => {
-                  const seatIdx = Math.max(0, state.players.findIndex((x) => x.id === p.id));
-                  return (
-                    <button
-                      key={p.id}
-                      disabled={busy}
-                      onClick={() => void reclaimSeat(p.id)}
-                      className="flex w-full items-center gap-3 rounded-2xl border-[2.5px] border-ink bg-white p-3 text-left transition-colors hover:bg-sun-pale"
-                    >
-                      <PawnAvatar index={p.tokenIndex ?? seatIdx} color={p.color} size={42} />
-                      <div className="flex-1">
-                        <div className="font-display text-sm font-extrabold">{p.name}</div>
-                        <div className="money text-xs text-ink-soft">{rp(p.cash)}</div>
-                      </div>
-                      <Chip color="#2FD592">Masuk →</Chip>
-                    </button>
-                  );
-                })}
+            <div className="rounded-2xl border-2 border-ink bg-tint px-3 py-2 font-mono text-lg font-extrabold tracking-widest">
+              {code}
             </div>
             <div className="grid grid-cols-2 gap-2 pt-2">
+              <Button onClick={() => router.push(`/room/${code}`)}>🚪 Halaman Room</Button>
               <Button onClick={() => router.push(`/watch/${code}`)}>📺 Layar Papan TV</Button>
-              <Button variant="ghost" onClick={() => router.push("/")}>← Menu</Button>
+              <Button variant="ghost" className="col-span-2" onClick={() => router.push("/")}>
+                ← Menu
+              </Button>
             </div>
           </div>
           <Board state={state} selected={selectedTile} onSelect={() => {}} />
@@ -1003,7 +1007,7 @@ export function OnlineGame({ code, tv }: { code: string; tv: boolean }) {
         </div>
       )}
 
-      {state.auction ? (
+      {state.auction && (tv || needsMyBid) ? (
         <AuctionDialog
           state={state}
           act={act}
@@ -1130,7 +1134,11 @@ function WaitRoom({
       const res = await fetch(`/api/rooms/${code}/join`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...(identity ?? {}),
+          hostToken: tv ? (localStorage.getItem(`sp-host-${code}`) ?? undefined) : undefined,
+          ...payload,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Gagal ubah bot");
@@ -1154,7 +1162,6 @@ function WaitRoom({
         body: JSON.stringify({
           ...(identity ?? {}),
           hostToken,
-          fromTv: tv,
           forceReady: !allReady,
         }),
       });

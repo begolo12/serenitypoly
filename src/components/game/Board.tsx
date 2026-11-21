@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { GROUP_COLORS, GROUP_NAMES, GROUP_TILES, TILES, WAVE_LABEL } from "@/engine/data";
+import { GROUP_COLORS, GROUP_NAMES, GROUP_TILES, TILES, WAVE_LABEL, WAVE_MULT } from "@/engine/data";
 import { groupComplete, playerOf, rentPreview } from "@/engine/actions";
 import type { GameState, GroupId, Tile } from "@/engine/types";
 import { cn, rp } from "@/lib/format";
@@ -293,7 +293,7 @@ export function Board({
   return (
     <div
       className="relative mx-auto aspect-square w-full max-w-[min(100%,calc(100dvh-5.75rem))] rounded-[18px] sm:rounded-[28px] border-[2px] sm:border-[3px] border-ink bg-ink p-[2px] sm:p-[3px]"
-      style={{ containerType: "inline-size", fontSize: "clamp(5.2px, 1.04cqw, 11.5px)" }}
+      style={{ containerType: "inline-size", fontSize: "clamp(7px, 1.04cqw, 11.5px)" }}
     >
       <div className="grid h-full w-full grid-cols-[1.28fr_repeat(9,minmax(0,1fr))_1.28fr] grid-rows-[1.28fr_repeat(9,minmax(0,1fr))_1.28fr] gap-[1px] sm:gap-[2px] overflow-hidden rounded-[15px] sm:rounded-[23px] bg-ink">
         {TILES.map((tile) => {
@@ -312,9 +312,22 @@ export function Board({
           const isTradeWant = Boolean(state.trade?.wantProps.includes(tile.id));
 
           return (
-            <button
+            <div
               key={tile.id}
-              onClick={() => canClick && onSelect(tile.id)}
+              role={canClick ? "button" : undefined}
+              tabIndex={canClick ? 0 : -1}
+              aria-pressed={canClick ? selected === tile.id : undefined}
+              onClick={canClick ? () => onSelect(tile.id) : undefined}
+              onKeyDown={
+                canClick
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onSelect(tile.id);
+                      }
+                    }
+                  : undefined
+              }
               onMouseEnter={() => setHoveredTile(tile.id)}
               onMouseLeave={() => setHoveredTile((prev) => (prev === tile.id ? null : prev))}
               className={cn(
@@ -331,12 +344,12 @@ export function Board({
                 gridRow: row,
                 background:
                   owner && tile.group
-                    ? `${GROUP_COLORS[tile.group]}26`
+                    ? `color-mix(in srgb, ${GROUP_COLORS[tile.group]} 22%, #fff)`
                     : owner
-                      ? `${owner.color}16`
+                      ? `color-mix(in srgb, ${owner.color} 18%, #fff)`
                       : tileSurface(tile),
               }}
-              aria-label={`${tile.name}${owner ? `, milik ${owner.name}` : ""}`}
+              aria-label={canClick ? `${tile.name}${owner ? `, milik ${owner.name}` : ""}` : undefined}
             >
               {tile.group ? (
                 <div
@@ -405,19 +418,19 @@ export function Board({
                   />
                 </div>
                 <div className="w-full pb-[1px]">
-                  <div className="truncate font-bold tracking-tight text-ink" style={{ fontSize: "0.78em" }}>
+                  <div className="truncate font-bold tracking-tight text-ink" style={{ fontSize: "max(7px, 0.8em)" }}>
                     {tile.short}
                   </div>
                   {tile.price ? (
                     <div
-                      className="money mx-auto hidden sm:inline-block rounded-full bg-ink/[0.07] px-1 py-[0.5px] font-semibold text-ink-soft"
-                      style={{ fontSize: "0.64em" }}
+                      className="money mx-auto hidden max-w-full truncate rounded-full bg-ink/[0.07] px-1 py-[0.5px] font-semibold text-ink-soft sm:inline-block"
+                      style={{ fontSize: "max(7px, 0.64em)" }}
                     >
-                      {tile.price}
+                      {rp(tile.price)}
                     </div>
                   ) : tile.tax ? (
-                    <div className="money font-bold text-tomato" style={{ fontSize: "0.66em" }}>
-                      -{tile.tax}
+                    <div className="money font-bold text-tomato" style={{ fontSize: "max(7px, 0.66em)" }}>
+                      -{rp(tile.tax)}
                     </div>
                   ) : null}
                 </div>
@@ -480,7 +493,7 @@ export function Board({
                   title="Milikmu"
                 />
               ) : null}
-            </button>
+            </div>
           );
         })}
 
@@ -503,6 +516,8 @@ export function Board({
           {toast ? (
             <div
               key={toast.id}
+              role={toast.tone === "warn" ? "alert" : "status"}
+              aria-live={toast.tone === "warn" ? "assertive" : "polite"}
               className={cn(
                 "pointer-events-none absolute left-1/2 top-[2.2%] z-30 flex max-w-[92%] -translate-x-1/2 items-center gap-1.5 rounded-full border-[2.5px] border-ink px-3 py-1 font-bold shadow-sm animate-[toast-pop_0.28s_var(--ease-out-soft)]",
                 toast.tone === "warn"
@@ -537,6 +552,12 @@ export function Board({
             <div
               onClick={() => {
                 if (canRoll && onRoll) onRoll();
+              }}
+              onKeyDown={(e) => {
+                if (canRoll && onRoll && (e.key === "Enter" || e.key === " ")) {
+                  e.preventDefault();
+                  onRoll();
+                }
               }}
               role={canRoll && onRoll ? "button" : undefined}
               tabIndex={canRoll && onRoll ? 0 : undefined}
@@ -610,7 +631,7 @@ export function Board({
                 <div className="truncate font-display text-[11px] font-extrabold leading-tight text-ink">
                   {spotlightTile.name}
                 </div>
-                <div className="truncate text-[9.5px] font-semibold text-ink-soft">
+                <div className="truncate text-[10px] font-semibold text-ink-soft">
                   {spotlightOwner
                     ? `Milik ${spotlightOwner.name}`
                     : spotlightTile.price
@@ -620,7 +641,11 @@ export function Board({
               </div>
             </button>
 
-            <div className="truncate rounded-full border-[1.5px] border-ink bg-white px-2.5 py-1 text-[10px] font-semibold text-ink-soft">
+            <div
+              role="status"
+              aria-live="polite"
+              className="truncate rounded-full border-[1.5px] border-ink bg-white px-2.5 py-1 text-[10px] font-semibold text-ink-soft"
+            >
               {lastLog ? (
                 <>
                   <span className="mr-1 font-mono font-bold text-ink">R{lastLog.round}</span>
@@ -681,14 +706,7 @@ export function Board({
               const label = WAVE_LABEL[w].charAt(0) + WAVE_LABEL[w].slice(1).toLowerCase();
               const isCurrent = state.wave === w;
               const isPast = state.wave > w;
-              const tip =
-                w === 1
-                  ? "Ronde 1–5: Sewa ×1, maks 3 rumah"
-                  : w === 2
-                    ? "Ronde 6–11: Sewa ×1,5, hotel & saham terbuka"
-                    : w === 3
-                      ? "Ronde 12–15: Sewa ×2, PBB 5% aktif"
-                      : "Ronde 16–17: Sewa ×2,5, pinjaman jatuh tempo";
+              const tip = `Fase ${WAVE_LABEL[w].charAt(0)}${WAVE_LABEL[w].slice(1).toLowerCase()}: pengali sewa ×${WAVE_MULT[w]}`;
               return (
                 <Tooltip key={w} tip={tip} position="bottom" className="w-full">
                   <div
@@ -869,7 +887,7 @@ export function Board({
                         style={{ fontSize: "0.66em" }}
                       >
                         <span className="text-ink-soft">{RENT_TIER_SHORT[i]}</span>
-                        <span className="money font-bold text-ink">{r}</span>
+                        <span className="money font-bold text-ink">{rp(r)}</span>
                       </div>
                     ))}
                   </div>
@@ -878,7 +896,7 @@ export function Board({
                     {[25, 50, 100, 200].map((r, i) => (
                       <div key={i} className="rounded-lg border border-ink bg-blue-pale px-1 py-[2px] text-center" style={{ fontSize: "0.64em" }}>
                         <div className="font-semibold text-ink-soft">{i + 1} Unit</div>
-                        <div className="money font-bold text-ink">{r}</div>
+                        <div className="money font-bold text-ink">{rp(r)}</div>
                       </div>
                     ))}
                   </div>
@@ -962,7 +980,7 @@ export function Board({
                             "flex-1",
                             entry.tone === "good" && "font-bold text-ink",
                             entry.tone === "warn" && "font-semibold text-tomato",
-                            entry.tone === "money" && "font-semibold text-[#0e8a5a]",
+                            entry.tone === "money" && "font-semibold text-positive",
                             entry.tone === "info" && "text-ink-soft",
                           )}
                         >
@@ -1111,11 +1129,4 @@ export function Board({
       </div>
     </div>
   );
-}
-
-export function rentText(tile: Tile, houses: number): string {
-  if (tile.type === "property" && tile.rents) return rp(tile.rents[Math.min(houses, 5)]);
-  if (tile.type === "transport") return "Rp 25–200";
-  if (tile.type === "utility") return "4× / 10× dadu";
-  return "—";
 }

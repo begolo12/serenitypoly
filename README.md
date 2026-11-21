@@ -25,7 +25,8 @@ Papan monopoli **multiplayer 2–4 pemain** bertema seluruh Indonesia, dengan ga
 1. Menu → **Online** → isi nama → **Buat Room Online**.
 2. Bagikan kode 6 karakter atau link/QR ke pemain lain (`/room/KODE`).
 3. Semua pemain menekan **Siap**, host menekan **Mulai Game**.
-4. Untuk mode papan: Menu → **Papan + HP** → **Buat Papan Tunggu**, tampilkan di TV/laptop, pemain scan QR dari HP.
+4. Di dalam game, tombol **💬** membuka **Quick Chat** — 8 frasa preset (tanpa chat bebas), muncul 6 detik di papan dan punya jeda kirim 4 detik.
+5. Untuk mode papan: Menu → **Papan + HP** → **Buat Papan Tunggu**, tampilkan di TV/laptop, pemain scan QR dari HP.
 
 
 ## Fitur
@@ -39,7 +40,16 @@ Papan monopoli **multiplayer 2–4 pemain** bertema seluruh Indonesia, dengan ga
 - **4 preset**: Pemula, Klasik, Standar, Penuh.
 - **Neobrutalism**: border tebal, hard shadow, tipografi Archivo Black + Space Grotesk + Space Mono.
 - **Audio ringan** (WebAudio, tanpa aset), mute 1 klik, tersimpan.
-- Responsif: papan pinch-friendly di HP, tanpa scroll horizontal pada 390 px.
+- **Quick Chat online** preset-only: pesan singkat, toast 6 detik, jeda 4 detik, disimpan di DB dengan batas 12 jam.
+- Responsif: papan pinch-friendly di HP, tanpa scroll horizontal pada 375 px.
+
+## Keamanan online
+
+- **Identitas kursi** = `playerId` + `token` acak (crypto) + `reconnectKey` terpisah. Token hanya bisa dipulihkan dengan `reconnectKey`, jadi mengetahui id kursi saja tidak cukup untuk membajaknya.
+- **Host-only** untuk mulai, rematch, dan tambah/hapus bot. Rematch hanya boleh saat game benar-benar selesai; start memakai klaim atomik agar tidak ada dua game untuk satu room.
+- **Redaksi state**: `rng`/`seed`, misi, dan isi kartu tangan pemain lain tidak pernah dikirim ke klien. Klien hanya menerima data privatnya sendiri.
+- **Rate limit di DB** (lintas instance serverless): buat room, percobaan reconnect, quick chat.
+- Tanpa `DATABASE_URL`, server menolak melayani room (tidak ada fallback diam-diam ke memori yang menyamarkan error DB).
 
 ## Menjalankan
 
@@ -53,21 +63,22 @@ npm start
 ## Verifikasi
 
 ```bash
-npx tsx scripts/sim.ts 300        # 300 game bot, cek invariant ekonomi & bangunan
-npx tsx scripts/feature-test.ts   # 27 tes aturan (bangun, sewa, saham, pinjaman, trade, PBB, krisis)
-node scripts/online-test.mjs http://localhost:3000   # E2E API online (room, join, siap, mulai, auth)
+npx tsx scripts/sim.ts 300        # 300 game bot, cek invariant ekonomi & bangunan (exit 1 bila ada error)
+npx tsx scripts/feature-test.ts   # 65 tes aturan (bangun, sewa, saham, pinjaman, trade, PBB, krisis, bangkrut)
+node scripts/online-test.mjs http://localhost:3000   # E2E API online (room, join, siap, mulai, auth, redaksi, chat)
 npm run typecheck
 npm run build
 ```
 
-Hasil terakhir: **300/300 game selesai tanpa error invariant**, **27/27 tes aturan lulus**, **E2E online lulus** (termasuk penolakan aksi di luar giliran dan token salah).
+Hasil terakhir: **300/300 game selesai tanpa error invariant**, **65/65 tes aturan lulus**, **E2E online lulus** (termasuk penolakan klaim kursi tanpa kunci, start/rematch tanpa host, aksi di luar giliran, token salah, redaksi RNG/misi, dan quick chat preset-only + rate limit).
 
 ## Arsitektur online
 
-- **Neon Postgres** (`ap-southeast-1`, Singapore) menyimpan room dan state game sebagai JSONB.
+- **Neon Postgres** (`ap-southeast-1`, Singapore) menyimpan room, state game, chat, dan hitungan rate limit sebagai JSONB.
 - Aksi dikirim ke `/api/games/[code]`, divalidasi giliran + token kursi, lalu disimpan dengan pengunci versi.
-- Klien polling 1,2 detik (`?since=versi`) — cukup untuk game giliran dan jauh lebih murah dari WebSocket.
-- Papan besar (TV) membaca state yang sama tanpa panel privat.
+- Klien polling ~1,3 detik (`?since=versi`) — cukup untuk game giliran dan jauh lebih murah dari WebSocket. Poll langsung dipercepat saat tab kembali aktif.
+- Papan besar (TV) membaca state yang sama tanpa panel privat, dan boleh menggerakkan bot lewat `hostToken`.
+- Quick chat lewat `/api/chats/[code]`: hanya 8 frasa preset, rate limit 4 detik per kursi dihitung dari DB, pesan lama dibersihkan otomatis setelah 12 jam.
 
 ## Papan
 
